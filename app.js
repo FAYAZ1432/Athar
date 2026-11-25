@@ -7,7 +7,8 @@ function escapeText(value) {
 class SmartSchoolSystem {
     constructor() {
         this.students = [];
-        this.STORAGE_KEY = 'athar_smart_school_permanent_v3';
+        this.STORAGE_KEY = 'athar_portfolios_v1';
+        this.LEGACY_STORAGE_KEY = 'athar_smart_school_permanent_v3';
         this.activeProfileId = null;
         this.isStudentPortalMode = false;
         this.loadData();
@@ -17,28 +18,20 @@ class SmartSchoolSystem {
             this.renderAll();
         }
     }
+    portfolioRecords(records) {
+        return records.map(({ id, fullName, grade, section, achievements }) => ({
+            id, fullName, grade, section, achievements
+        }));
+    }
     loadData() {
         try {
-            const saved = localStorage.getItem(this.STORAGE_KEY);
-            if (saved !== null) {
-                const parsed = JSON.parse(saved);
-                this.students = Array.isArray(parsed)
-                    ? parsed.map((s) => ({
-                        ...s,
-                        excusedDays: typeof s.excusedDays === 'number' ? s.excusedDays : 0,
-                        attendanceLogs: Array.isArray(s.attendanceLogs)
-                            ? s.attendanceLogs.map((log, idx) => ({
-                                ...log,
-                                id: log.id || `LOG-${Date.now()}-${idx}`
-                            }))
-                            : []
-                    }))
-                    : [];
-            }
-            else {
-                this.students = [];
+            const current = localStorage.getItem(this.STORAGE_KEY);
+            // Leave the original browser records untouched as a local backup.
+            const saved = current ?? localStorage.getItem(this.LEGACY_STORAGE_KEY);
+            const parsed = JSON.parse(saved ?? "[]");
+            this.students = Array.isArray(parsed) ? this.portfolioRecords(parsed) : [];
+            if (current === null && saved !== null)
                 this.saveData();
-            }
         }
         catch {
             this.students = [];
@@ -57,7 +50,6 @@ class SmartSchoolSystem {
             student.fullName,
             student.grade,
             student.section,
-            0, 0, 0, 0, [], // Reserved positions for older QR readers.
             student.achievements.slice(0, 4).map((ac) => [
                 ac.title,
                 ac.category,
@@ -86,32 +78,15 @@ class SmartSchoolSystem {
             }
             const json = new TextDecoder().decode(bytes);
             const arr = JSON.parse(json);
-            const revStatus = {
-                p: 'present',
-                l: 'late',
-                e: 'excused',
-                a: 'absent'
-            };
             if (Array.isArray(arr)) {
+                const awards = arr.length >= 9 ? arr[8] : arr[3];
                 return {
                     id: studentId,
                     fullName: String(arr[0] || 'طالب مسجل'),
                     grade: String(arr[1] || '—'),
                     section: String(arr[2] || '—'),
-                    presentDays: Number(arr[3] || 0),
-                    lateDays: Number(arr[4] || 0),
-                    excusedDays: Number(arr[5] || 0),
-                    absentDays: Number(arr[6] || 0),
-                    attendanceLogs: Array.isArray(arr[7])
-                        ? arr[7].map((lg) => ({
-                            date: String(lg[0] || ''),
-                            time: String(lg[1] || '—'),
-                            status: revStatus[lg[2]] || 'present',
-                            method: 'جهاز قارئ الباركود'
-                        }))
-                        : [],
-                    achievements: Array.isArray(arr[8])
-                        ? arr[8].map((ac, idx) => ({
+                    achievements: Array.isArray(awards)
+                        ? awards.map((ac, idx) => ({
                             id: `ACH-${idx}`,
                             title: String(ac[0] || ''),
                             category: (ac[1] || 'شهادة تفوق'),
@@ -198,11 +173,6 @@ class SmartSchoolSystem {
             fullName,
             grade,
             section,
-            presentDays: 0,
-            lateDays: 0,
-            excusedDays: 0,
-            absentDays: 0,
-            attendanceLogs: [],
             achievements: []
         };
         this.students.unshift(newStudent);
@@ -272,7 +242,7 @@ class SmartSchoolSystem {
                     alert('ملف النسخة الاحتياطية غير صالح.');
                     return;
                 }
-                this.students = parsed;
+                this.students = this.portfolioRecords(parsed);
                 this.saveData();
                 this.renderAll();
                 alert(`✅ تم استعادة ${this.students.length} طالب بنجاح وحفظهم!`);
@@ -306,8 +276,7 @@ class SmartSchoolSystem {
                 });
             }
             catch {
-                const minimalStudent = { ...student, attendanceLogs: [], achievements: student.achievements.slice(0, 2) };
-                const fallbackUrl = this.buildStudentPortalUrl(minimalStudent);
+                const fallbackUrl = this.buildStudentPortalUrl({ ...student, achievements: [] });
                 new QRCode(qrContainer, {
                     text: fallbackUrl,
                     width: 180,
