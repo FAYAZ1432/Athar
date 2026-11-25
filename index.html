@@ -16,7 +16,7 @@
     <div class="container header-content">
       <div>
         <h1>أثر <span>لوحة المدرسة</span></h1>
-        <p>التحضير الإلكتروني والتعرف على الطلاب وتوثيق إنجازاتهم بتقنية QR Code</p>
+        <p>ملفات طلابية رقمية وبطاقات لمشاركة الإنجازات</p>
       </div>
       <div class="project-badge">إعداد الطلاب: فايز الحربي - علي المتحمي</div>
     </div>
@@ -27,88 +27,35 @@
       <header class="smart-id-card portal-hero">
         <div class="id-card-header">
           <span class="id-card-tag">أثر / الملف الطلابي</span>
-          <span class="id-card-year">1448 هـ</span>
         </div>
         <div class="id-card-body">
           <div class="id-card-info">
             <h1 id="portal-student-name" dir="auto">—</h1>
             <small class="field-label">الصف والشعبة</small>
             <p id="portal-student-grade">—</p>
-            <div class="id-number-box">
-              <span>الرقم التعريفي:</span>
-              <code id="portal-student-id">STU-000000</code>
-            </div>
           </div>
         </div>
       </header>
 
-      <section class="panel portal-section" aria-labelledby="portal-attendance">
-      <h2 id="portal-attendance">ملخص الحضور</h2>
-      <div class="mini-stats">
-        <div><span>أيام الحضور</span><strong id="portal-present">0</strong></div>
-        <div><span>التأخر</span><strong id="portal-late">0</strong></div>
-        <div><span>بعذر</span><strong id="portal-excused">0</strong></div>
-        <div><span>الغياب</span><strong id="portal-absent">0</strong></div>
-        <div><span>نسبة الانتظام</span><strong id="portal-rate">0%</strong></div>
-      </div>
-
-      </section>
-      <section class="panel portal-section">
+    <section class="panel portal-section">
       <h2>الإنجازات والشهادات</h2>
       <div id="portal-achievements-list" class="achievements-grid"></div>
 
       </section>
-      <section class="panel portal-section">
-      <h2>سجل الحضور والغياب</h2>
-      <div class="table-responsive">
-        <table>
-          <thead>
-            <tr>
-              <th>التاريخ</th>
-              <th>الوقت</th>
-              <th>الحالة</th>
-            </tr>
-          </thead>
-          <tbody id="portal-logs-list"></tbody>
-        </table>
-      </div>
-      </section>
-    </div>
+</div>
   </main>
 
   <main id="admin-dashboard-view" class="container">
+    <section class="panel"><h2>مساحة الطالب</h2><p>جرّب تحرير نبذة وصورة في ملف تجريبي. التغييرات محفوظة في هذا المتصفح فقط.</p><a class="btn btn-primary" href="demo/noura/#edit">فتح محرر الملف التجريبي</a></section>
     <section class="stats-grid">
       <div class="stat-card">
         <span class="stat-label">إجمالي الهويات الرقمية</span>
         <strong id="stat-students">0</strong>
       </div>
-      <div class="stat-card">
-        <span class="stat-label">متوسط نسبة الانتظام</span>
-        <strong id="stat-rate">0%</strong>
-      </div>
-      <div class="stat-card">
+    <div class="stat-card">
         <span class="stat-label">الإنجازات والشهادات الموثقة</span>
         <strong id="stat-achievements">0</strong>
       </div>
-    </section>
-
-    <section class="panel gate-panel">
-      <div class="panel-header">
-        <h2>📡 جهاز التحضير الذكي (قارئ الباركود عند البوابة)</h2>
-        <span>مرّر بطاقة الطالب أمام جهاز قارئ الباركود المتصل باللابتوب لتسجيل الحضور فوراً</span>
-      </div>
-      <div class="gate-controls">
-        <input
-          type="text"
-          id="barcode-scanner-input"
-          class="scanner-input"
-          placeholder="جاهز للقراءة — امسح باركود الطالب بالجهاز الآن..."
-          autocomplete="off"
-          autofocus
-        />
-        <button id="gate-scan-btn" class="btn btn-primary">تأكيد المسح</button>
-      </div>
-      <div id="gate-feedback" class="gate-feedback"></div>
     </section>
 
     <section class="forms-grid">
@@ -149,9 +96,9 @@
 
     <section class="panel">
       <div class="table-toolbar">
-        <h2>📋 سجل الهويات المدرسية والانتظام</h2>
+        <h2>📋 سجل الملفات الطلابية</h2>
         <div class="toolbar-actions">
-          <input type="search" id="search-input" placeholder="ابحث بالاسم أو الرقم التعريفي..." />
+          <input type="search" id="search-input" placeholder="ابحث عن طالب..." />
           <button type="button" id="export-btn" class="btn btn-light">💾 حفظ نسخة</button>
           <label class="btn btn-light file-label">
             📂 استعادة نسخة
@@ -163,10 +110,8 @@
         <table>
           <thead>
             <tr>
-              <th>الرقم التعريفي</th>
               <th>اسم الطالب</th>
               <th>الصف والشعبة</th>
-              <th>نسبة الانتظام</th>
               <th>الإنجازات</th>
               <th>الإجراءات السريعة</th>
             </tr>
@@ -187,7 +132,6 @@
       <div class="smart-id-card" id="printable-card">
         <div class="id-card-header">
           <span class="id-card-tag">🪪 نظام أثر | الهوية المدرسية الذكية</span>
-          <span class="id-card-year">1448 هـ</span>
         </div>
         <div class="id-card-body">
           <div class="id-card-info">
@@ -195,14 +139,10 @@
             <h3 id="card-student-name">—</h3>
             <small class="field-label">الصف والشعبة</small>
             <p id="card-student-grade">—</p>
-            <div class="id-number-box">
-              <span>الرقم التعريفي:</span>
-              <code id="card-student-id">STU-000000</code>
-            </div>
           </div>
           <div class="id-card-qr">
             <div id="card-qr-box"></div>
-            <small>امسح للتحضير والملف</small>
+            <small>امسح لفتح الملف الطلابي</small>
           </div>
         </div>
       </div>
@@ -212,33 +152,10 @@
         <button class="btn btn-accent" onclick="schoolApp.copyStudentPortalUrl()">🔗 نسخ رابط بوابة الطالب</button>
       </div>
 
-      <div class="mini-stats">
-        <div><span>أيام الحضور</span><strong id="profile-present">0</strong></div>
-        <div><span>التأخر</span><strong id="profile-late">0</strong></div>
-        <div><span>بعذر</span><strong id="profile-excused">0</strong></div>
-        <div><span>الغياب</span><strong id="profile-absent">0</strong></div>
-        <div><span>نسبة الانتظام</span><strong id="profile-rate">0%</strong></div>
-      </div>
-
-      <h3 class="section-sub">🎖️ المسيرة التعليمية والإنجازات الموثقة</h3>
+<h3 class="section-sub">🎖️ المسيرة التعليمية والإنجازات الموثقة</h3>
       <div id="profile-achievements-list" class="achievements-grid"></div>
 
-      <h3 class="section-sub">🕒 سجلات الدخول والحضور (قابلة للتعديل)</h3>
-      <div class="table-responsive">
-        <table>
-          <thead>
-            <tr>
-              <th>التاريخ</th>
-              <th>الوقت</th>
-              <th>الحالة</th>
-              <th>وسيلة الرصد</th>
-              <th>تعديل الحالة</th>
-            </tr>
-          </thead>
-          <tbody id="profile-logs-list"></tbody>
-        </table>
-      </div>
-    </div>
+</div>
   </div>
 
   <script src="app.js"></script>
