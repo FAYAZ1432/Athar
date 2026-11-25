@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>نظام أثر | الهوية المدرسية الذكية</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body>
+  <header class="top-header">
+    <div class="container header-content">
+      <div>
+        <h1>🪪 نظام أثر | الهوية المدرسية الذكية</h1>
+        <p>التحضير الإلكتروني والتعرف على الطلاب وتوثيق إنجازاتهم بتقنية QR Code</p>
+      </div>
+      <div class="project-badge">إعداد: فايز الحربي • التقنية والابتكار</div>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="stats-grid">
+      <div class="stat-card">
+        <span class="stat-label">إجمالي الهويات الرقمية</span>
+        <strong id="stat-students">0</strong>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">متوسط نسبة الانتظام</span>
+        <strong id="stat-rate">0%</strong>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">الإنجازات والشهادات الموثقة</span>
+        <strong id="stat-achievements">0</strong>
+      </div>
+    </section>
+
+    <section class="panel gate-panel">
+      <div class="panel-header">
+        <h2>📡 قارئ البوابة الذكي (التحضير الفوري عبر QR)</h2>
+        <span>مرّر البطاقة أو اختر الطالب لمحاكاة مسح الرمز عند دخول المدرسة</span>
+      </div>
+      <div class="gate-controls">
+        <select id="gate-student-select" aria-label="اختر بطاقة الطالب"></select>
+        <button id="gate-scan-btn" class="btn btn-primary">مسح البطاقة وتسجيل الحضور</button>
+      </div>
+      <div id="gate-feedback" class="gate-feedback"></div>
+    </section>
+
+    <section class="forms-grid">
+      <div class="panel">
+        <h3>➕ إصدار هوية رقمية لطالب جديد</h3>
+        <form id="add-student-form" class="stack-form">
+          <input type="text" id="new-student-name" placeholder="اسم الطالب الثلاثي" required />
+          <div class="row-2">
+            <select id="new-student-grade">
+              <option value="الأول الثانوي">الأول الثانوي</option>
+              <option value="الثاني الثانوي">الثاني الثانوي</option>
+              <option value="الثالث الثانوي">الثالث الثانوي</option>
+            </select>
+            <input type="text" id="new-student-section" placeholder="الشعبة (مثلاً: موهوبون - أ)" />
+          </div>
+          <button type="submit" class="btn btn-primary">إنشاء البطاقة وتوليد QR</button>
+        </form>
+      </div>
+
+      <div class="panel">
+        <h3>🏆 توثيق إنجاز أو شهادة في ملف الطالب</h3>
+        <form id="add-ach-form" class="stack-form">
+          <select id="ach-student-select" aria-label="اختر الطالب"></select>
+          <input type="text" id="ach-title" placeholder="عنوان الإنجاز أو الجائزة" required />
+          <div class="row-2">
+            <select id="ach-category">
+              <option value="جائزة ابتكار">جائزة ابتكار</option>
+              <option value="شهادة تفوق">شهادة تفوق</option>
+              <option value="مسابقة علمية">مسابقة علمية</option>
+              <option value="مشاركة مجتمعية">مشاركة مجتمعية</option>
+            </select>
+            <input type="text" id="ach-issuer" placeholder="الجهة المانحة" />
+          </div>
+          <button type="submit" class="btn btn-accent">إضافة للملف الرقمي</button>
+        </form>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="table-toolbar">
+        <h2>📋 سجل الهويات المدرسية والانتظام</h2>
+        <input type="search" id="search-input" placeholder="ابحث بالاسم أو الرقم التعريفي..." />
+      </div>
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>الرقم التعريفي</th>
+              <th>اسم الطالب</th>
+              <th>الصف والشعبة</th>
+              <th>نسبة الانتظام</th>
+              <th>الإنجازات</th>
+              <th>الإجراءات السريعة</th>
+            </tr>
+          </thead>
+          <tbody id="students-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <div id="profile-modal" class="modal-backdrop">
+    <div class="modal-card">
+      <div class="modal-top">
+        <h2>الملف الطلابي الرقمي الموحد</h2>
+        <button id="close-modal-btn" class="btn btn-light">✕ إغلاق</button>
+      </div>
+
+      <div class="smart-id-card" id="printable-card">
+        <div class="id-card-header">
+          <span class="id-card-tag">🪪 نظام أثر | الهوية المدرسية الذكية</span>
+          <span class="id-card-year">1448 هـ</span>
+        </div>
+        <div class="id-card-body">
+          <div class="id-card-info">
+            <small class="field-label">اسم الطالب</small>
+            <h3 id="card-student-name">—</h3>
+            <small class="field-label">الصف والشعبة</small>
+            <p id="card-student-grade">—</p>
+            <div class="id-number-box">
+              <span>الرقم التعريفي:</span>
+              <code id="card-student-id">STU-000000</code>
+            </div>
+          </div>
+          <div class="id-card-qr">
+            <div id="card-qr-box"></div>
+            <small>امسح للتحضير والملف</small>
+          </div>
+        </div>
+      </div>
+
+      <div class="print-bar">
+        <button class="btn btn-primary" onclick="window.print()">🖨️ طباعة البطاقة الذكية</button>
+      </div>
+
+      <div class="mini-stats">
+        <div><span>أيام الحضور</span><strong id="profile-present">0</strong></div>
+        <div><span>التأخر</span><strong id="profile-late">0</strong></div>
+        <div><span>الغياب</span><strong id="profile-absent">0</strong></div>
+        <div><span>نسبة الانتظام</span><strong id="profile-rate">100%</strong></div>
+      </div>
+
+      <h3 class="section-sub">🎖️ المسيرة التعليمية والإنجازات الموثقة</h3>
+      <div id="profile-achievements-list" class="achievements-grid"></div>
+
+      <h3 class="section-sub">🕒 أحدث سجلات الدخول والحضور</h3>
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>التاريخ</th>
+              <th>الوقت</th>
+              <th>الحالة</th>
+              <th>وسيلة الرصد</th>
+            </tr>
+          </thead>
+          <tbody id="profile-logs-list"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
