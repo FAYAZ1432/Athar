@@ -1,12 +1,13 @@
 declare var QRCode: any;
 
-type AttendanceStatus = 'present' | 'late' | 'absent';
+type AttendanceStatus = 'present' | 'late' | 'excused' | 'absent';
 
 interface AttendanceLog {
+  id?: string;
   date: string;
   time: string;
   status: AttendanceStatus;
-  method: 'بوابة QR الذكية' | 'رصد إداري';
+  method: 'جهاز قارئ الباركود' | 'رصد إداري';
 }
 
 interface Achievement {
@@ -24,6 +25,7 @@ interface Student {
   section: string;
   presentDays: number;
   lateDays: number;
+  excusedDays?: number;
   absentDays: number;
   attendanceLogs: AttendanceLog[];
   achievements: Achievement[];
@@ -46,7 +48,18 @@ class SmartSchoolSystem {
       const saved = localStorage.getItem(this.STORAGE_KEY);
       if (saved !== null) {
         const parsed = JSON.parse(saved);
-        this.students = Array.isArray(parsed) ? parsed : [];
+        this.students = Array.isArray(parsed)
+          ? parsed.map((s: Student) => ({
+              ...s,
+              excusedDays: typeof s.excusedDays === 'number' ? s.excusedDays : 0,
+              attendanceLogs: Array.isArray(s.attendanceLogs)
+                ? s.attendanceLogs.map((log, idx) => ({
+                    ...log,
+                    id: log.id || `LOG-${Date.now()}-${idx}`
+                  }))
+                : []
+            }))
+          : [];
       } else {
         this.students = [];
         this.saveData();
@@ -59,16 +72,26 @@ class SmartSchoolSystem {
   private saveData(): void {
     try {
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.students));
-    } catch (error) {
+    } catch {
       alert('تعذر الحفظ في المتصفح. تأكد أنك لا تستخدم وضع التصفح الخفي.');
     }
   }
 
+  private recalculateStats(student: Student): void {
+    student.presentDays = student.attendanceLogs.filter((l) => l.status === 'present').length;
+    student.lateDays = student.attendanceLogs.filter((l) => l.status === 'late').length;
+    student.excusedDays = student.attendanceLogs.filter((l) => l.status === 'excused').length;
+    student.absentDays = student.attendanceLogs.filter((l) => l.status === 'absent').length;
+  }
+
   private calculateAttendanceRate(student: Student): number {
-    const total = student.presentDays + student.lateDays + student.absentDays;
-    if (total === 0) return 100;
+    const excused = student.excusedDays || 0;
+    const effectiveTotal = student.presentDays + student.lateDays + student.absentDays;
+    if (effectiveTotal === 0) {
+      return excused > 0 ? 100 : 0;
+    }
     const weightedPresent = student.presentDays + student.lateDays * 0.5;
-    return Math.round((weightedPresent / total) * 100);
+    return Math.round((weightedPresent / effectiveTotal) * 100);
   }
 
   private checkUrlForStudentScan(): void {
@@ -82,13 +105,59 @@ class SmartSchoolSystem {
     }
   }
 
-  public scanAtGate(studentId: string): void {
-    const student = this.students.find((s) => s.id.toUpperCase() === studentId.trim().toUpperCase());
+  private normalizeArabicKeyboard(raw: string): string {
+    const map: Record<string, string> = {
+      'ض': 'q', 'ص': 'w', 'ث': 'e', 'ق': 'r', 'ف': 't', 'غ': 'y', 'ع': 'u', 'ه': 'i', 'خ': 'o', 'ح': 'p',
+      'ش': 'a', 'س': 's', 'ي': 'd', 'ب': 'f', 'ل': 'g', 'ا': 'h', 'ت': 'j', 'ن': 'k', 'م': 'l', 'ك': ':',
+      'ئ': 'z', 'ء': 'x', 'ؤ': 'c', 'ر': 'v', 'ى': 'n', 'ة': 'm', 'و': ',', 'ز': '.', 'ظ': '/', '؟': '?'
+    };
+    const replacedLamAlef = raw.replace(/لا/g, 'b');
+    return replacedLamAlef
+      .split('')
+      .map((ch) => map[ch] || ch)
+      .join('');
+  }
+
+  private extractStudentId(rawInput: string): string {
+    const normalized = this.normalizeArabicKeyboard(rawInput.trim());
+    const urlMatch = normalized.match(/[?&]student=([^&]+)/i);
+    if (urlMatch && urlMatch[1]) {
+      return decodeURIComponent(urlMatch[1]).trim().toUpperCase();
+    }
+    return normalized.toUpperCase();
+  }
+
+  private playBeep(isSuccess: boolean): void {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = isSuccess ? 'sine' : 'sawtooth';
+      osc.frequency.setValueAtTime(isSuccess ? 880 : 240, ctx.currentTime);
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (isSuccess ? 0.18 : 0.35));
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + (isSuccess ? 0.18 : 0.35));
+    } catch {
+      // تجاهل في حال عدم دعم الصوت
+    }
+  }
+
+  public scanAtGate(rawCode: string): void {
+    const extractedId = this.extractStudentId(rawCode);
+    if (!extractedId) return;
+
+    const student = this.students.find((s) => s.id.toUpperCase() === extractedId);
     const feedbackEl = document.getElementById('gate-feedback') as HTMLElement;
 
     if (!student) {
+      this.playBeep(false);
       feedbackEl.className = 'gate-feedback error';
-      feedbackEl.innerHTML = `❌ الرمز غير مسجل في النظام: <strong>${studentId}</strong>`;
+      feedbackEl.innerHTML = `❌ الباركود غير مسجل في النظام: <strong>${extractedId}</strong>`;
       return;
     }
 
@@ -96,24 +165,43 @@ class SmartSchoolSystem {
     const timeStr = now.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
     const dateStr = now.toLocaleDateString('ar-SA');
 
-    student.presentDays += 1;
+    const alreadyScannedToday = student.attendanceLogs.find(
+      (log) => log.date === dateStr && (log.status === 'present' || log.status === 'late')
+    );
+
+    if (alreadyScannedToday) {
+      this.playBeep(false);
+      feedbackEl.className = 'gate-feedback error';
+      feedbackEl.innerHTML = `
+        <div>
+          ⚠️ <strong>تم تسجيل حضور هذا الطالب مسبقاً اليوم!</strong><br>
+          <span>الطالب: <b>${student.fullName}</b> — سُجِّل في الساعة <b>${alreadyScannedToday.time}</b> (لن يُحتسب مرتين).</span>
+        </div>
+        <button class="btn btn-sm btn-light" onclick="schoolApp.openStudentProfile('${student.id}')">عرض البطاقة</button>
+      `;
+      return;
+    }
+
     student.attendanceLogs.unshift({
+      id: `LOG-${Date.now()}`,
       date: dateStr,
       time: timeStr,
       status: 'present',
-      method: 'بوابة QR الذكية'
+      method: 'جهاز قارئ الباركود'
     });
 
+    this.recalculateStats(student);
     this.saveData();
     this.renderAll();
+    this.playBeep(true);
 
     feedbackEl.className = 'gate-feedback success';
     feedbackEl.innerHTML = `
       <div>
-        ✅ <strong>تم التعرف على الطالب وتسجيل حضوره بنجاح!</strong><br>
+        ✅ <strong>تم مسح الباركود وتسجيل الحضور بنجاح!</strong><br>
         <span>الطالب: <b>${student.fullName}</b> (${student.grade}) — وقت الدخول: <b>${timeStr}</b></span>
       </div>
-      <button class="btn btn-sm btn-light" onclick="schoolApp.openStudentProfile('${student.id}')">فتح الملف الرقمي</button>
+      <button class="btn btn-sm btn-light" onclick="schoolApp.openStudentProfile('${student.id}')">عرض البطاقة</button>
     `;
   }
 
@@ -125,19 +213,59 @@ class SmartSchoolSystem {
     const timeStr = now.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
     const dateStr = now.toLocaleDateString('ar-SA');
 
-    if (status === 'present') student.presentDays += 1;
-    if (status === 'late') student.lateDays += 1;
-    if (status === 'absent') student.absentDays += 1;
-
     student.attendanceLogs.unshift({
+      id: `LOG-${Date.now()}`,
       date: dateStr,
-      time: status === 'absent' ? '—' : timeStr,
+      time: status === 'absent' || status === 'excused' ? '—' : timeStr,
       status,
       method: 'رصد إداري'
     });
 
+    this.recalculateStats(student);
     this.saveData();
     this.renderAll();
+
+    if (this.activeProfileId === studentId) {
+      this.openStudentProfile(studentId);
+    }
+  }
+
+  public updateAttendanceLog(studentId: string, logId: string, newStatus: AttendanceStatus): void {
+    const student = this.students.find((s) => s.id === studentId);
+    if (!student) return;
+
+    const log = student.attendanceLogs.find((l) => l.id === logId);
+    if (!log) return;
+
+    log.status = newStatus;
+    log.method = 'رصد إداري';
+    if (newStatus === 'absent' || newStatus === 'excused') {
+      log.time = '—';
+    } else if (log.time === '—') {
+      log.time = new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    this.recalculateStats(student);
+    this.saveData();
+    this.renderAll();
+
+    if (this.activeProfileId === studentId) {
+      this.openStudentProfile(studentId);
+    }
+  }
+
+  public deleteAttendanceLog(studentId: string, logId: string): void {
+    const student = this.students.find((s) => s.id === studentId);
+    if (!student) return;
+
+    student.attendanceLogs = student.attendanceLogs.filter((l) => l.id !== logId);
+    this.recalculateStats(student);
+    this.saveData();
+    this.renderAll();
+
+    if (this.activeProfileId === studentId) {
+      this.openStudentProfile(studentId);
+    }
   }
 
   public addNewStudent(fullName: string, grade: string, section: string): void {
@@ -147,17 +275,11 @@ class SmartSchoolSystem {
       fullName,
       grade,
       section,
-      presentDays: 1,
+      presentDays: 0,
       lateDays: 0,
+      excusedDays: 0,
       absentDays: 0,
-      attendanceLogs: [
-        {
-          date: new Date().toLocaleDateString('ar-SA'),
-          time: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
-          status: 'present',
-          method: 'رصد إداري'
-        }
-      ],
+      attendanceLogs: [],
       achievements: []
     };
 
@@ -280,6 +402,8 @@ class SmartSchoolSystem {
 
     (document.getElementById('profile-present') as HTMLElement).textContent = String(student.presentDays);
     (document.getElementById('profile-late') as HTMLElement).textContent = String(student.lateDays);
+    const excusedEl = document.getElementById('profile-excused');
+    if (excusedEl) excusedEl.textContent = String(student.excusedDays || 0);
     (document.getElementById('profile-absent') as HTMLElement).textContent = String(student.absentDays);
     (document.getElementById('profile-rate') as HTMLElement).textContent = `${rate}%`;
 
@@ -304,20 +428,47 @@ class SmartSchoolSystem {
     }
 
     const logsList = document.getElementById('profile-logs-list') as HTMLElement;
-    logsList.innerHTML = student.attendanceLogs
-      .slice(0, 6)
-      .map((log) => {
-        const label = log.status === 'present' ? 'حاضر' : log.status === 'late' ? 'متأخر' : 'غائب';
-        return `
-          <tr>
-            <td>${log.date}</td>
-            <td>${log.time}</td>
-            <td><span class="status-pill ${log.status}">${label}</span></td>
-            <td>${log.method}</td>
-          </tr>
-        `;
-      })
-      .join('');
+    if (student.attendanceLogs.length === 0) {
+      logsList.innerHTML = `
+        <tr>
+          <td colspan="5" style="text-align: center; color: #64748b; padding: 14px;">
+            لم يُسجَّل حضور لهذا الطالب بعد. امسح بطاقته في جهاز القارئ لتسجيل حضوره.
+          </td>
+        </tr>
+      `;
+    } else {
+      logsList.innerHTML = student.attendanceLogs
+        .slice(0, 10)
+        .map((log) => {
+          const logId = log.id || '';
+          const label =
+            log.status === 'present'
+              ? 'حاضر'
+              : log.status === 'late'
+              ? 'متأخر'
+              : log.status === 'excused'
+              ? 'بعذر'
+              : 'غائب';
+          return `
+            <tr>
+              <td>${log.date}</td>
+              <td>${log.time}</td>
+              <td><span class="status-pill ${log.status}">${label}</span></td>
+              <td>${log.method}</td>
+              <td class="log-edit-cell">
+                <select class="status-select" aria-label="تعديل الحالة" onchange="schoolApp.updateAttendanceLog('${student.id}', '${logId}', this.value)">
+                  <option value="present" ${log.status === 'present' ? 'selected' : ''}>حاضر</option>
+                  <option value="late" ${log.status === 'late' ? 'selected' : ''}>متأخر</option>
+                  <option value="excused" ${log.status === 'excused' ? 'selected' : ''}>بعذر</option>
+                  <option value="absent" ${log.status === 'absent' ? 'selected' : ''}>غائب</option>
+                </select>
+                <button class="btn-mini-del" title="حذف السجل" onclick="schoolApp.deleteAttendanceLog('${student.id}', '${logId}')">🗑️</button>
+              </td>
+            </tr>
+          `;
+        })
+        .join('');
+    }
 
     const modal = document.getElementById('profile-modal') as HTMLElement;
     modal.classList.add('open');
@@ -343,19 +494,13 @@ class SmartSchoolSystem {
     (document.getElementById('stat-rate') as HTMLElement).textContent = `${avgRate}%`;
     (document.getElementById('stat-achievements') as HTMLElement).textContent = String(totalAchievements);
 
-    const gateSelect = document.getElementById('gate-student-select') as HTMLSelectElement;
     const achSelect = document.getElementById('ach-student-select') as HTMLSelectElement;
-
     if (this.students.length === 0) {
-      const emptyOpt = `<option value="">لا يوجد طلاب مسجلون حالياً</option>`;
-      gateSelect.innerHTML = emptyOpt;
-      achSelect.innerHTML = emptyOpt;
+      achSelect.innerHTML = `<option value="">لا يوجد طلاب مسجلون حالياً</option>`;
     } else {
-      const optionsHtml = this.students
+      achSelect.innerHTML = this.students
         .map((s) => `<option value="${s.id}">${s.fullName} (${s.id})</option>`)
         .join('');
-      gateSelect.innerHTML = optionsHtml;
-      achSelect.innerHTML = optionsHtml;
     }
 
     const tbody = document.getElementById('students-tbody') as HTMLElement;
@@ -373,6 +518,7 @@ class SmartSchoolSystem {
     tbody.innerHTML = filtered
       .map((student) => {
         const rate = this.calculateAttendanceRate(student);
+        const excused = student.excusedDays || 0;
         return `
           <tr>
             <td><strong>${student.id}</strong></td>
@@ -382,14 +528,15 @@ class SmartSchoolSystem {
               <div class="progress-wrap">
                 <div class="progress-bar" style="width: ${rate}%"></div>
               </div>
-              <small>${rate}% (${student.presentDays} حضور / ${student.absentDays} غياب)</small>
+              <small>${rate}% (${student.presentDays} حضور / ${excused} بعذر / ${student.absentDays} غياب)</small>
             </td>
             <td><span class="ach-count">🏆 ${student.achievements.length}</span></td>
             <td class="actions-cell">
               <button class="btn btn-present" onclick="schoolApp.recordManualAttendance('${student.id}', 'present')">حاضر</button>
               <button class="btn btn-late" onclick="schoolApp.recordManualAttendance('${student.id}', 'late')">متأخر</button>
+              <button class="btn btn-excused" onclick="schoolApp.recordManualAttendance('${student.id}', 'excused')">بعذر</button>
               <button class="btn btn-absent" onclick="schoolApp.recordManualAttendance('${student.id}', 'absent')">غائب</button>
-              <button class="btn btn-qr" onclick="schoolApp.openStudentProfile('${student.id}')">🪪 البطاقة</button>
+              <button class="btn btn-qr" onclick="schoolApp.openStudentProfile('${student.id}')">🪪 البطاقة والتعديل</button>
               <button class="btn btn-delete" onclick="schoolApp.deleteStudent('${student.id}')">🗑️ حذف</button>
             </td>
           </tr>
@@ -399,9 +546,30 @@ class SmartSchoolSystem {
   }
 
   private initEventListeners(): void {
-    document.getElementById('gate-scan-btn')?.addEventListener('click', () => {
-      const select = document.getElementById('gate-student-select') as HTMLSelectElement;
-      if (select.value) this.scanAtGate(select.value);
+    const scannerInput = document.getElementById('barcode-scanner-input') as HTMLInputElement;
+    const scanBtn = document.getElementById('gate-scan-btn') as HTMLButtonElement;
+    const gatePanel = document.querySelector('.gate-panel') as HTMLElement;
+
+    const triggerBarcodeRead = () => {
+      if (!scannerInput.value.trim()) return;
+      this.scanAtGate(scannerInput.value);
+      scannerInput.value = '';
+      scannerInput.focus();
+    };
+
+    scannerInput?.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        triggerBarcodeRead();
+      }
+    });
+
+    scanBtn?.addEventListener('click', () => triggerBarcodeRead());
+
+    gatePanel?.addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).tagName !== 'BUTTON') {
+        scannerInput?.focus();
+      }
     });
 
     document.getElementById('search-input')?.addEventListener('input', () => this.renderAll());
@@ -451,6 +619,7 @@ class SmartSchoolSystem {
     document.getElementById('close-modal-btn')?.addEventListener('click', () => {
       document.getElementById('profile-modal')?.classList.remove('open');
       this.activeProfileId = null;
+      scannerInput?.focus();
     });
   }
 }

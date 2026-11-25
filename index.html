@@ -38,12 +38,19 @@
 
     <section class="panel gate-panel">
       <div class="panel-header">
-        <h2>📡 قارئ البوابة الذكي (التحضير الفوري عبر QR)</h2>
-        <span>مرّر البطاقة أو اختر الطالب لمحاكاة مسح الرمز عند دخول المدرسة</span>
+        <h2>📡 جهاز التحضير الذكي (قارئ الباركود عند البوابة)</h2>
+        <span>مرّر بطاقة الطالب أمام جهاز قارئ الباركود المتصل باللابتوب لتسجيل الحضور فوراً</span>
       </div>
       <div class="gate-controls">
-        <select id="gate-student-select" aria-label="اختر بطاقة الطالب"></select>
-        <button id="gate-scan-btn" class="btn btn-primary">مسح البطاقة وتسجيل الحضور</button>
+        <input
+          type="text"
+          id="barcode-scanner-input"
+          class="scanner-input"
+          placeholder="جاهز للقراءة — امسح باركود الطالب بالجهاز الآن..."
+          autocomplete="off"
+          autofocus
+        />
+        <button id="gate-scan-btn" class="btn btn-primary">تأكيد المسح</button>
       </div>
       <div id="gate-feedback" class="gate-feedback"></div>
     </section>
@@ -151,14 +158,15 @@
       <div class="mini-stats">
         <div><span>أيام الحضور</span><strong id="profile-present">0</strong></div>
         <div><span>التأخر</span><strong id="profile-late">0</strong></div>
+        <div><span>بعذر</span><strong id="profile-excused">0</strong></div>
         <div><span>الغياب</span><strong id="profile-absent">0</strong></div>
-        <div><span>نسبة الانتظام</span><strong id="profile-rate">100%</strong></div>
+        <div><span>نسبة الانتظام</span><strong id="profile-rate">0%</strong></div>
       </div>
 
       <h3 class="section-sub">🎖️ المسيرة التعليمية والإنجازات الموثقة</h3>
       <div id="profile-achievements-list" class="achievements-grid"></div>
 
-      <h3 class="section-sub">🕒 أحدث سجلات الدخول والحضور</h3>
+      <h3 class="section-sub">🕒 سجلات الدخول والحضور (قابلة للتعديل)</h3>
       <div class="table-responsive">
         <table>
           <thead>
@@ -167,6 +175,7 @@
               <th>الوقت</th>
               <th>الحالة</th>
               <th>وسيلة الرصد</th>
+              <th>تعديل الحالة</th>
             </tr>
           </thead>
           <tbody id="profile-logs-list"></tbody>

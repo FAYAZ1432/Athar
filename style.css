@@ -476,3 +476,29 @@ th {
   #printable-card, #printable-card * { visibility: visible; }
   #printable-card { position: fixed; top: 20px; right: 20px; width: 440px; }
 }
+.btn-excused {
+  background: #e0f2fe;
+  color: #0369a1;
+  padding: 6px 10px;
+}
+
+.status-pill.excused {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.mini-stats {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.log-edit-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-select {
+  padding: 4px 8px;
+  font-size: 0.82rem;
+  border-radius: 6px;
+}
