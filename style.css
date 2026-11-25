@@ -177,10 +177,17 @@ input, select {
   cursor: pointer;
   font-size: 0.88rem;
   transition: opacity 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .btn:hover {
   opacity: 0.9;
+}
+
+.file-label {
+  cursor: pointer;
 }
 
 .btn-primary { background: var(--primary); color: #fff; }
@@ -204,6 +211,13 @@ input, select {
 .table-toolbar h2 {
   margin: 0;
   font-size: 1.15rem;
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
 .table-responsive {
@@ -417,6 +431,21 @@ th {
   padding: 12px;
   border-radius: 10px;
   background: #fffbeb;
+}
+
+.ach-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.btn-mini-del {
+  background: transparent;
+  border: none;
+  color: #991b1b;
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 0.95rem;
 }
 
 .achievement-item h4 {

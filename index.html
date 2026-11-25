@@ -87,7 +87,14 @@
     <section class="panel">
       <div class="table-toolbar">
         <h2>📋 سجل الهويات المدرسية والانتظام</h2>
-        <input type="search" id="search-input" placeholder="ابحث بالاسم أو الرقم التعريفي..." />
+        <div class="toolbar-actions">
+          <input type="search" id="search-input" placeholder="ابحث بالاسم أو الرقم التعريفي..." />
+          <button type="button" id="export-btn" class="btn btn-light">💾 حفظ نسخة</button>
+          <label class="btn btn-light file-label">
+            📂 استعادة نسخة
+            <input type="file" id="import-input" accept=".json" hidden />
+          </label>
+        </div>
       </div>
       <div class="table-responsive">
         <table>

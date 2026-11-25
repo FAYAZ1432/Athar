@@ -2,7 +2,7 @@
 class SmartSchoolSystem {
     constructor() {
         this.students = [];
-        this.STORAGE_KEY = 'smart_school_id_data_v1';
+        this.STORAGE_KEY = 'athar_smart_school_permanent_v3';
         this.activeProfileId = null;
         this.loadData();
         this.initEventListeners();
@@ -10,89 +10,28 @@ class SmartSchoolSystem {
         this.checkUrlForStudentScan();
     }
     loadData() {
-        const saved = localStorage.getItem(this.STORAGE_KEY);
-        if (saved) {
-            this.students = JSON.parse(saved);
+        try {
+            const saved = localStorage.getItem(this.STORAGE_KEY);
+            if (saved !== null) {
+                const parsed = JSON.parse(saved);
+                this.students = Array.isArray(parsed) ? parsed : [];
+            }
+            else {
+                this.students = [];
+                this.saveData();
+            }
         }
-        else {
-            this.students = [
-                {
-                    id: 'STU-144801',
-                    fullName: 'فايز الحربي',
-                    grade: 'الثالث الثانوي',
-                    section: 'موهوبون - أ',
-                    presentDays: 42,
-                    lateDays: 1,
-                    absentDays: 0,
-                    attendanceLogs: [
-                        { date: '1448/04/15', time: '06:48 ص', status: 'present', method: 'بوابة QR الذكية' },
-                        { date: '1448/04/14', time: '06:51 ص', status: 'present', method: 'بوابة QR الذكية' }
-                    ],
-                    achievements: [
-                        {
-                            id: 'ACH-1',
-                            title: 'المركز الأول في الأولمبياد الوطني للإبداع العلمي - مسار التقنية والابتكار',
-                            category: 'جائزة ابتكار',
-                            date: '1448/04/10',
-                            issuer: 'مؤسسة الملك عبدالعزيز ورجاله للموهبة والإبداع'
-                        },
-                        {
-                            id: 'ACH-2',
-                            title: 'شهادة التميز والانضباط المدرسي المثالي',
-                            category: 'شهادة تفوق',
-                            date: '1448/03/25',
-                            issuer: 'إدارة المدرسة'
-                        }
-                    ]
-                },
-                {
-                    id: 'STU-144802',
-                    fullName: 'عبدالله السبيعي',
-                    grade: 'الثاني الثانوي',
-                    section: 'عام - ب',
-                    presentDays: 38,
-                    lateDays: 3,
-                    absentDays: 2,
-                    attendanceLogs: [
-                        { date: '1448/04/15', time: '07:05 ص', status: 'late', method: 'بوابة QR الذكية' }
-                    ],
-                    achievements: [
-                        {
-                            id: 'ACH-3',
-                            title: 'وسام المبادرة التطوعية في خدمة البيئة المدرسية',
-                            category: 'مشاركة مجتمعية',
-                            date: '1448/03/18',
-                            issuer: 'رائد النشاط الطلابي'
-                        }
-                    ]
-                },
-                {
-                    id: 'STU-144803',
-                    fullName: 'سعود القحطاني',
-                    grade: 'الأول الثانوي',
-                    section: 'موهوبون - أ',
-                    presentDays: 40,
-                    lateDays: 0,
-                    absentDays: 1,
-                    attendanceLogs: [
-                        { date: '1448/04/15', time: '06:45 ص', status: 'present', method: 'بوابة QR الذكية' }
-                    ],
-                    achievements: [
-                        {
-                            id: 'ACH-4',
-                            title: 'المركز الثاني في مسابقة الروبوت والذكاء الاصطناعي',
-                            category: 'مسابقة علمية',
-                            date: '1448/04/02',
-                            issuer: 'إدارة التعليم'
-                        }
-                    ]
-                }
-            ];
-            this.saveData();
+        catch {
+            this.students = [];
         }
     }
     saveData() {
-        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.students));
+        try {
+            localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.students));
+        }
+        catch (error) {
+            alert('تعذر الحفظ في المتصفح. تأكد أنك لا تستخدم وضع التصفح الخفي.');
+        }
     }
     calculateAttendanceRate(student) {
         const total = student.presentDays + student.lateDays + student.absentDays;
@@ -163,7 +102,7 @@ class SmartSchoolSystem {
         this.renderAll();
     }
     addNewStudent(fullName, grade, section) {
-        const randomNum = Math.floor(144804 + Math.random() * 899);
+        const randomNum = Math.floor(100000 + Math.random() * 899999);
         const newStudent = {
             id: `STU-${randomNum}`,
             fullName,
@@ -204,8 +143,10 @@ class SmartSchoolSystem {
     }
     addAchievement(studentId, title, category, issuer) {
         const student = this.students.find((s) => s.id === studentId);
-        if (!student)
+        if (!student) {
+            alert('يرجى إضافة طالب أولاً قبل توثيق الإنجازات.');
             return;
+        }
         student.achievements.unshift({
             id: `ACH-${Date.now()}`,
             title,
@@ -215,9 +156,48 @@ class SmartSchoolSystem {
         });
         this.saveData();
         this.renderAll();
+        this.openStudentProfile(studentId);
+    }
+    deleteAchievement(studentId, achievementId) {
+        const student = this.students.find((s) => s.id === studentId);
+        if (!student)
+            return;
+        student.achievements = student.achievements.filter((a) => a.id !== achievementId);
+        this.saveData();
+        this.renderAll();
         if (this.activeProfileId === studentId) {
             this.openStudentProfile(studentId);
         }
+    }
+    exportBackup() {
+        const dataStr = JSON.stringify(this.students, null, 2);
+        const blob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `athar-backup-${new Date().toISOString().slice(0, 10)}.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+    }
+    importBackup(file) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const parsed = JSON.parse(String(event.target?.result || '[]'));
+                if (!Array.isArray(parsed)) {
+                    alert('ملف النسخة الاحتياطية غير صالح.');
+                    return;
+                }
+                this.students = parsed;
+                this.saveData();
+                this.renderAll();
+                alert(`✅ تم استعادة ${this.students.length} طالب بنجاح وحفظهم!`);
+            }
+            catch {
+                alert('حدث خطأ أثناء قراءة الملف. تأكد من اختيار ملف JSON صحيح.');
+            }
+        };
+        reader.readAsText(file);
     }
     openStudentProfile(studentId) {
         const student = this.students.find((s) => s.id === studentId);
@@ -253,7 +233,10 @@ class SmartSchoolSystem {
             achList.innerHTML = student.achievements
                 .map((ach) => `
           <div class="achievement-item">
-            <span class="badge-category">${ach.category}</span>
+            <div class="ach-top-row">
+              <span class="badge-category">${ach.category}</span>
+              <button class="btn-mini-del" title="حذف الإنجاز" onclick="schoolApp.deleteAchievement('${student.id}', '${ach.id}')">✕</button>
+            </div>
             <h4>${ach.title}</h4>
             <small>الجهة المانحة: ${ach.issuer} | التاريخ: ${ach.date}</small>
           </div>
@@ -293,12 +276,29 @@ class SmartSchoolSystem {
         document.getElementById('stat-achievements').textContent = String(totalAchievements);
         const gateSelect = document.getElementById('gate-student-select');
         const achSelect = document.getElementById('ach-student-select');
-        const optionsHtml = this.students
-            .map((s) => `<option value="${s.id}">${s.fullName} (${s.id})</option>`)
-            .join('');
-        gateSelect.innerHTML = optionsHtml;
-        achSelect.innerHTML = optionsHtml;
+        if (this.students.length === 0) {
+            const emptyOpt = `<option value="">لا يوجد طلاب مسجلون حالياً</option>`;
+            gateSelect.innerHTML = emptyOpt;
+            achSelect.innerHTML = emptyOpt;
+        }
+        else {
+            const optionsHtml = this.students
+                .map((s) => `<option value="${s.id}">${s.fullName} (${s.id})</option>`)
+                .join('');
+            gateSelect.innerHTML = optionsHtml;
+            achSelect.innerHTML = optionsHtml;
+        }
         const tbody = document.getElementById('students-tbody');
+        if (filtered.length === 0) {
+            tbody.innerHTML = `
+        <tr>
+          <td colspan="6" style="text-align: center; color: #64748b; padding: 24px;">
+            لا يوجد طلاب في السجل حالياً. أضف طالباً جديداً من النموذج أعلاه وسيتم حفظه تلقائياً.
+          </td>
+        </tr>
+      `;
+            return;
+        }
         tbody.innerHTML = filtered
             .map((student) => {
             const rate = this.calculateAttendanceRate(student);
@@ -354,6 +354,14 @@ class SmartSchoolSystem {
                 this.addAchievement(studentSelect.value, titleInput.value.trim(), catSelect.value, issuerInput.value.trim() || 'إدارة المدرسة');
                 titleInput.value = '';
                 issuerInput.value = '';
+            }
+        });
+        document.getElementById('export-btn')?.addEventListener('click', () => this.exportBackup());
+        document.getElementById('import-input')?.addEventListener('change', (e) => {
+            const target = e.target;
+            if (target.files && target.files[0]) {
+                this.importBackup(target.files[0]);
+                target.value = '';
             }
         });
         document.getElementById('close-modal-btn')?.addEventListener('click', () => {
