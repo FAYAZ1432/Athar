@@ -48,75 +48,110 @@ class SmartSchoolSystem {
         }
     }
     encodeStudentPayload(student) {
-        const compact = {
-            i: student.id,
-            n: student.fullName,
-            g: student.grade,
-            s: student.section,
-            p: student.presentDays,
-            l: student.lateDays,
-            e: student.excusedDays || 0,
-            a: student.absentDays,
-            logs: student.attendanceLogs.slice(0, 8).map((lg) => ({
-                d: lg.date,
-                t: lg.time,
-                st: lg.status
-            })),
-            ach: student.achievements.slice(0, 8).map((ac) => ({
-                t: ac.title,
-                c: ac.category,
-                d: ac.date,
-                u: ac.issuer
-            }))
+        const statusMap = {
+            present: 'p',
+            late: 'l',
+            excused: 'e',
+            absent: 'a'
         };
-        const json = JSON.stringify(compact);
+        const ultraCompact = [
+            student.fullName,
+            student.grade,
+            student.section,
+            student.presentDays,
+            student.lateDays,
+            student.excusedDays || 0,
+            student.absentDays,
+            student.attendanceLogs.slice(0, 4).map((lg) => [
+                lg.date,
+                lg.time,
+                statusMap[lg.status] || 'p'
+            ]),
+            student.achievements.slice(0, 4).map((ac) => [
+                ac.title,
+                ac.category,
+                ac.date,
+                ac.issuer
+            ])
+        ];
+        const json = JSON.stringify(ultraCompact);
         const bytes = new TextEncoder().encode(json);
         let bin = '';
-        bytes.forEach((b) => (bin += String.fromCharCode(b)));
+        for (let i = 0; i < bytes.length; i++) {
+            bin += String.fromCharCode(bytes[i]);
+        }
         return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     }
-    decodeStudentPayload(encoded) {
+    decodeStudentPayload(studentId, encoded) {
         try {
-            let b64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
+            const cleanEncoded = encoded.trim().replace(/\s+/g, '');
+            let b64 = cleanEncoded.replace(/-/g, '+').replace(/_/g, '/');
             while (b64.length % 4)
                 b64 += '=';
             const bin = atob(b64);
             const bytes = new Uint8Array(bin.length);
-            for (let i = 0; i < bin.length; i++)
+            for (let i = 0; i < bin.length; i++) {
                 bytes[i] = bin.charCodeAt(i);
+            }
             const json = new TextDecoder().decode(bytes);
-            const c = JSON.parse(json);
-            return {
-                id: c.i,
-                fullName: c.n,
-                grade: c.g,
-                section: c.s,
-                presentDays: c.p || 0,
-                lateDays: c.l || 0,
-                excusedDays: c.e || 0,
-                absentDays: c.a || 0,
-                attendanceLogs: Array.isArray(c.logs)
-                    ? c.logs.map((lg) => ({
-                        date: lg.d,
-                        time: lg.t,
-                        status: lg.st,
-                        method: 'جهاز قارئ الباركود'
-                    }))
-                    : [],
-                achievements: Array.isArray(c.ach)
-                    ? c.ach.map((ac, idx) => ({
-                        id: `ACH-${idx}`,
-                        title: ac.t,
-                        category: ac.c,
-                        date: ac.d,
-                        issuer: ac.u
-                    }))
-                    : []
+            const arr = JSON.parse(json);
+            const revStatus = {
+                p: 'present',
+                l: 'late',
+                e: 'excused',
+                a: 'absent'
             };
+            if (Array.isArray(arr)) {
+                return {
+                    id: studentId,
+                    fullName: String(arr[0] || 'طالب مسجل'),
+                    grade: String(arr[1] || '—'),
+                    section: String(arr[2] || '—'),
+                    presentDays: Number(arr[3] || 0),
+                    lateDays: Number(arr[4] || 0),
+                    excusedDays: Number(arr[5] || 0),
+                    absentDays: Number(arr[6] || 0),
+                    attendanceLogs: Array.isArray(arr[7])
+                        ? arr[7].map((lg) => ({
+                            date: String(lg[0] || ''),
+                            time: String(lg[1] || '—'),
+                            status: revStatus[lg[2]] || 'present',
+                            method: 'جهاز قارئ الباركود'
+                        }))
+                        : [],
+                    achievements: Array.isArray(arr[8])
+                        ? arr[8].map((ac, idx) => ({
+                            id: `ACH-${idx}`,
+                            title: String(ac[0] || ''),
+                            category: (ac[1] || 'شهادة تفوق'),
+                            date: String(ac[2] || ''),
+                            issuer: String(ac[3] || 'إدارة المدرسة')
+                        }))
+                        : []
+                };
+            }
+            return null;
         }
         catch {
             return null;
         }
+    }
+    buildStudentPortalUrl(student) {
+        const baseUrl = window.location.href.split('?')[0];
+        const encodedPayload = this.encodeStudentPayload(student);
+        return `${baseUrl}?student=${encodeURIComponent(student.id)}&data=${encodedPayload}`;
+    }
+    copyStudentPortalUrl() {
+        if (!this.activeProfileId)
+            return;
+        const student = this.students.find((s) => s.id === this.activeProfileId);
+        if (!student)
+            return;
+        const url = this.buildStudentPortalUrl(student);
+        navigator.clipboard
+            .writeText(url)
+            .then(() => alert('✅ تم نسخ رابط بوابة الطالب بنجاح! يمكنك إرساله الآن عبر الواتساب.'))
+            .catch(() => prompt('انسخ الرابط التالي يدوياً:', url));
     }
     checkStudentPortalMode() {
         const params = new URLSearchParams(window.location.search);
@@ -127,7 +162,7 @@ class SmartSchoolSystem {
         this.isStudentPortalMode = true;
         document.body.classList.add('student-portal-mode');
         const localStudent = this.students.find((s) => s.id.toUpperCase() === scannedId.toUpperCase());
-        const decodedStudent = encodedData ? this.decodeStudentPayload(encodedData) : null;
+        const decodedStudent = encodedData ? this.decodeStudentPayload(scannedId, encodedData) : null;
         const targetStudent = localStudent || decodedStudent;
         const portalContainer = document.getElementById('student-portal-view');
         const adminContainer = document.getElementById('admin-dashboard-view');
@@ -138,8 +173,9 @@ class SmartSchoolSystem {
         if (!targetStudent) {
             portalContainer.innerHTML = `
         <div class="panel" style="text-align:center; padding:32px; margin-top:24px;">
-          <h2>⚠️ تعذر العثور على بيانات البطاقة</h2>
-          <p>تأكد من مسح رمز QR الصحيح الصادر من المدرسة.</p>
+          <h2>⚠️ تعذر قراءة بيانات البطاقة</h2>
+          <p>الرقم التعريفي: <strong>${scannedId}</strong></p>
+          <p style="color:#64748b; font-size:0.9rem;">يرجى إعادة فتح البطاقة من جهاز المدرسة لتوليد رمز QR محدّث ثم مسحه مرة أخرى.</p>
         </div>
       `;
             return;
@@ -465,18 +501,30 @@ class SmartSchoolSystem {
         document.getElementById('card-student-id').textContent = student.id;
         const qrContainer = document.getElementById('card-qr-box');
         qrContainer.innerHTML = '';
-        const baseUrl = window.location.href.split('?')[0];
-        const encodedPayload = this.encodeStudentPayload(student);
-        const profileUrl = `${baseUrl}?student=${encodeURIComponent(student.id)}&data=${encodedPayload}`;
+        const profileUrl = this.buildStudentPortalUrl(student);
         if (typeof QRCode !== 'undefined') {
-            new QRCode(qrContainer, {
-                text: profileUrl,
-                width: 120,
-                height: 120,
-                colorDark: '#0b2533',
-                colorLight: '#ffffff',
-                correctLevel: QRCode.CorrectLevel.L
-            });
+            try {
+                new QRCode(qrContainer, {
+                    text: profileUrl,
+                    width: 180,
+                    height: 180,
+                    colorDark: '#000000',
+                    colorLight: '#ffffff',
+                    correctLevel: QRCode.CorrectLevel.L
+                });
+            }
+            catch {
+                const minimalStudent = { ...student, attendanceLogs: [], achievements: student.achievements.slice(0, 2) };
+                const fallbackUrl = this.buildStudentPortalUrl(minimalStudent);
+                new QRCode(qrContainer, {
+                    text: fallbackUrl,
+                    width: 180,
+                    height: 180,
+                    colorDark: '#000000',
+                    colorLight: '#ffffff',
+                    correctLevel: QRCode.CorrectLevel.L
+                });
+            }
         }
         document.getElementById('profile-present').textContent = String(student.presentDays);
         document.getElementById('profile-late').textContent = String(student.lateDays);

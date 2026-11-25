@@ -399,23 +399,33 @@ th {
 .id-card-qr {
   background: #ffffff;
   color: var(--text);
-  padding: 12px;
+  padding: 16px;
   border-radius: 14px;
   border: 2px solid #d4af37;
   text-align: center;
+  min-width: 215px;
+}
+
+.id-card-qr img,
+.id-card-qr canvas {
+  margin: 0 auto;
+  display: block;
 }
 
 .id-card-qr small {
   display: block;
-  margin-top: 6px;
-  font-size: 0.74rem;
+  margin-top: 8px;
+  font-size: 0.78rem;
   font-weight: 700;
   color: #0b2533;
 }
 
 .print-bar {
   margin: 12px 0 18px;
-  text-align: left;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
 }
 
 .mini-stats {
@@ -505,7 +515,6 @@ th {
   text-align: center;
 }
 
-/* تحسين عرض بوابة الطالب على شاشات الجوال */
 body.student-portal-mode .top-header {
   padding: 18px 0;
 }
@@ -525,5 +534,5 @@ body.student-portal-mode .top-header {
 @media print {
   body * { visibility: hidden; }
   #printable-card, #printable-card * { visibility: visible; }
-  #printable-card { position: fixed; top: 20px; right: 20px; width: 440px; }
+  #printable-card { position: fixed; top: 20px; right: 20px; width: 460px; }
 }

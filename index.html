@@ -20,7 +20,6 @@
     </div>
   </header>
 
-  <!-- واجهة الطالب المستقلة (تظهر فقط عند مسح QR من الجوال) -->
   <main id="student-portal-view" class="container" style="display: none;">
     <div class="panel" style="max-width: 680px; margin: 0 auto 24px;">
       <div class="smart-id-card" style="margin-bottom: 18px;">
@@ -69,7 +68,6 @@
     </div>
   </main>
 
-  <!-- واجهة المشرف والإدارة (تظهر في متصفح المدرسة فقط) -->
   <main id="admin-dashboard-view" class="container">
     <section class="stats-grid">
       <div class="stat-card">
@@ -203,6 +201,7 @@
 
       <div class="print-bar">
         <button class="btn btn-primary" onclick="window.print()">🖨️ طباعة البطاقة الذكية</button>
+        <button class="btn btn-accent" onclick="schoolApp.copyStudentPortalUrl()">🔗 نسخ رابط بوابة الطالب</button>
       </div>
 
       <div class="mini-stats">
