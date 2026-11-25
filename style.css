@@ -12,7 +12,7 @@
 
 * {
   box-sizing: border-box;
-  font-family: 'Cairo', sans-serif;
+  font-family: 'Cairo', system-ui, sans-serif;
 }
 
 body {

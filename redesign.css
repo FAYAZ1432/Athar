@@ -42,3 +42,5 @@ th, .empty-msg, .achievement-item { background: #f5eadb; }
 }
 
 .awards-home nav{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;padding-block:1.25rem}.awards-home nav strong{font-size:1.6rem;margin-inline-end:auto}.awards-home a:not(.btn){color:var(--primary)}.awards-home .awards-hero{background:var(--sand);padding:clamp(1.5rem,7vw,5rem)}.awards-hero h1{font-size:clamp(2rem,7vw,4rem);line-height:1.2;margin:.5rem 0}.awards-hero .btn{text-decoration:none}.awards-home footer{padding-block:1rem;color:var(--muted)}
+
+body.container{padding-inline:clamp(1rem,4vw,2rem)}.awards-home .stats-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,16rem),1fr))}.awards-home #examples{padding-block:1rem}.awards-home #examples .panel{margin:0;border-block-start:3px solid #b58b63}.awards-home nav a{font-weight:700;text-underline-offset:.25em}.top-header a{color:var(--primary);text-underline-offset:.25em}
