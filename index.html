@@ -20,7 +20,57 @@
     </div>
   </header>
 
-  <main class="container">
+  <!-- واجهة الطالب المستقلة (تظهر فقط عند مسح QR من الجوال) -->
+  <main id="student-portal-view" class="container" style="display: none;">
+    <div class="panel" style="max-width: 680px; margin: 0 auto 24px;">
+      <div class="smart-id-card" style="margin-bottom: 18px;">
+        <div class="id-card-header">
+          <span class="id-card-tag">🪪 بوابة الطالب الرقمية | نظام أثر</span>
+          <span class="id-card-year">1448 هـ</span>
+        </div>
+        <div class="id-card-body">
+          <div class="id-card-info">
+            <small class="field-label">اسم الطالب</small>
+            <h3 id="portal-student-name">—</h3>
+            <small class="field-label">الصف والشعبة</small>
+            <p id="portal-student-grade">—</p>
+            <div class="id-number-box">
+              <span>الرقم التعريفي:</span>
+              <code id="portal-student-id">STU-000000</code>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mini-stats">
+        <div><span>أيام الحضور</span><strong id="portal-present">0</strong></div>
+        <div><span>التأخر</span><strong id="portal-late">0</strong></div>
+        <div><span>بعذر</span><strong id="portal-excused">0</strong></div>
+        <div><span>الغياب</span><strong id="portal-absent">0</strong></div>
+        <div><span>نسبة الانتظام</span><strong id="portal-rate">0%</strong></div>
+      </div>
+
+      <h3 class="section-sub">🎖️ الإنجازات والشهادات الموثقة</h3>
+      <div id="portal-achievements-list" class="achievements-grid"></div>
+
+      <h3 class="section-sub">🕒 سجل الحضور والغياب</h3>
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>التاريخ</th>
+              <th>الوقت</th>
+              <th>الحالة</th>
+            </tr>
+          </thead>
+          <tbody id="portal-logs-list"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- واجهة المشرف والإدارة (تظهر في متصفح المدرسة فقط) -->
+  <main id="admin-dashboard-view" class="container">
     <section class="stats-grid">
       <div class="stat-card">
         <span class="stat-label">إجمالي الهويات الرقمية</span>

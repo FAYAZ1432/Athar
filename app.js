@@ -4,10 +4,13 @@ class SmartSchoolSystem {
         this.students = [];
         this.STORAGE_KEY = 'athar_smart_school_permanent_v3';
         this.activeProfileId = null;
+        this.isStudentPortalMode = false;
         this.loadData();
-        this.initEventListeners();
-        this.renderAll();
-        this.checkUrlForStudentScan();
+        this.checkStudentPortalMode();
+        if (!this.isStudentPortalMode) {
+            this.initEventListeners();
+            this.renderAll();
+        }
     }
     loadData() {
         try {
@@ -44,6 +47,162 @@ class SmartSchoolSystem {
             alert('تعذر الحفظ في المتصفح. تأكد أنك لا تستخدم وضع التصفح الخفي.');
         }
     }
+    encodeStudentPayload(student) {
+        const compact = {
+            i: student.id,
+            n: student.fullName,
+            g: student.grade,
+            s: student.section,
+            p: student.presentDays,
+            l: student.lateDays,
+            e: student.excusedDays || 0,
+            a: student.absentDays,
+            logs: student.attendanceLogs.slice(0, 8).map((lg) => ({
+                d: lg.date,
+                t: lg.time,
+                st: lg.status
+            })),
+            ach: student.achievements.slice(0, 8).map((ac) => ({
+                t: ac.title,
+                c: ac.category,
+                d: ac.date,
+                u: ac.issuer
+            }))
+        };
+        const json = JSON.stringify(compact);
+        const bytes = new TextEncoder().encode(json);
+        let bin = '';
+        bytes.forEach((b) => (bin += String.fromCharCode(b)));
+        return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+    decodeStudentPayload(encoded) {
+        try {
+            let b64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
+            while (b64.length % 4)
+                b64 += '=';
+            const bin = atob(b64);
+            const bytes = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++)
+                bytes[i] = bin.charCodeAt(i);
+            const json = new TextDecoder().decode(bytes);
+            const c = JSON.parse(json);
+            return {
+                id: c.i,
+                fullName: c.n,
+                grade: c.g,
+                section: c.s,
+                presentDays: c.p || 0,
+                lateDays: c.l || 0,
+                excusedDays: c.e || 0,
+                absentDays: c.a || 0,
+                attendanceLogs: Array.isArray(c.logs)
+                    ? c.logs.map((lg) => ({
+                        date: lg.d,
+                        time: lg.t,
+                        status: lg.st,
+                        method: 'جهاز قارئ الباركود'
+                    }))
+                    : [],
+                achievements: Array.isArray(c.ach)
+                    ? c.ach.map((ac, idx) => ({
+                        id: `ACH-${idx}`,
+                        title: ac.t,
+                        category: ac.c,
+                        date: ac.d,
+                        issuer: ac.u
+                    }))
+                    : []
+            };
+        }
+        catch {
+            return null;
+        }
+    }
+    checkStudentPortalMode() {
+        const params = new URLSearchParams(window.location.search);
+        const scannedId = params.get('student');
+        const encodedData = params.get('data');
+        if (!scannedId)
+            return;
+        this.isStudentPortalMode = true;
+        document.body.classList.add('student-portal-mode');
+        const localStudent = this.students.find((s) => s.id.toUpperCase() === scannedId.toUpperCase());
+        const decodedStudent = encodedData ? this.decodeStudentPayload(encodedData) : null;
+        const targetStudent = localStudent || decodedStudent;
+        const portalContainer = document.getElementById('student-portal-view');
+        const adminContainer = document.getElementById('admin-dashboard-view');
+        if (adminContainer)
+            adminContainer.style.display = 'none';
+        if (portalContainer)
+            portalContainer.style.display = 'block';
+        if (!targetStudent) {
+            portalContainer.innerHTML = `
+        <div class="panel" style="text-align:center; padding:32px; margin-top:24px;">
+          <h2>⚠️ تعذر العثور على بيانات البطاقة</h2>
+          <p>تأكد من مسح رمز QR الصحيح الصادر من المدرسة.</p>
+        </div>
+      `;
+            return;
+        }
+        this.renderStudentPortal(targetStudent);
+    }
+    renderStudentPortal(student) {
+        const rate = this.calculateAttendanceRate(student);
+        const excused = student.excusedDays || 0;
+        document.getElementById('portal-student-name').textContent = student.fullName;
+        document.getElementById('portal-student-grade').textContent = `${student.grade} — ${student.section}`;
+        document.getElementById('portal-student-id').textContent = student.id;
+        document.getElementById('portal-present').textContent = String(student.presentDays);
+        document.getElementById('portal-late').textContent = String(student.lateDays);
+        document.getElementById('portal-excused').textContent = String(excused);
+        document.getElementById('portal-absent').textContent = String(student.absentDays);
+        document.getElementById('portal-rate').textContent = `${rate}%`;
+        const achList = document.getElementById('portal-achievements-list');
+        if (student.achievements.length === 0) {
+            achList.innerHTML = `<p class="empty-msg">لا توجد إنجازات مسجلة في ملفك حتى الآن.</p>`;
+        }
+        else {
+            achList.innerHTML = student.achievements
+                .map((ach) => `
+          <div class="achievement-item">
+            <span class="badge-category">${ach.category}</span>
+            <h4>${ach.title}</h4>
+            <small>الجهة المانحة: ${ach.issuer} | التاريخ: ${ach.date}</small>
+          </div>
+        `)
+                .join('');
+        }
+        const logsList = document.getElementById('portal-logs-list');
+        if (student.attendanceLogs.length === 0) {
+            logsList.innerHTML = `
+        <tr>
+          <td colspan="3" style="text-align: center; color: #64748b; padding: 14px;">
+            لا توجد سجلات حضور أو غياب مسجلة بعد.
+          </td>
+        </tr>
+      `;
+        }
+        else {
+            logsList.innerHTML = student.attendanceLogs
+                .map((log) => {
+                const label = log.status === 'present'
+                    ? 'حاضر'
+                    : log.status === 'late'
+                        ? 'متأخر'
+                        : log.status === 'excused'
+                            ? 'بعذر'
+                            : 'غائب';
+                return `
+            <tr>
+              <td>${log.date}</td>
+              <td>${log.time}</td>
+              <td><span class="status-pill ${log.status}">${label}</span></td>
+            </tr>
+          `;
+            })
+                .join('');
+        }
+    }
     recalculateStats(student) {
         student.presentDays = student.attendanceLogs.filter((l) => l.status === 'present').length;
         student.lateDays = student.attendanceLogs.filter((l) => l.status === 'late').length;
@@ -58,16 +217,6 @@ class SmartSchoolSystem {
         }
         const weightedPresent = student.presentDays + student.lateDays * 0.5;
         return Math.round((weightedPresent / effectiveTotal) * 100);
-    }
-    checkUrlForStudentScan() {
-        const params = new URLSearchParams(window.location.search);
-        const scannedId = params.get('student');
-        if (scannedId) {
-            const exists = this.students.find((s) => s.id === scannedId);
-            if (exists) {
-                this.openStudentProfile(scannedId);
-            }
-        }
     }
     normalizeArabicKeyboard(raw) {
         const map = {
@@ -317,14 +466,16 @@ class SmartSchoolSystem {
         const qrContainer = document.getElementById('card-qr-box');
         qrContainer.innerHTML = '';
         const baseUrl = window.location.href.split('?')[0];
-        const profileUrl = `${baseUrl}?student=${encodeURIComponent(student.id)}`;
+        const encodedPayload = this.encodeStudentPayload(student);
+        const profileUrl = `${baseUrl}?student=${encodeURIComponent(student.id)}&data=${encodedPayload}`;
         if (typeof QRCode !== 'undefined') {
             new QRCode(qrContainer, {
                 text: profileUrl,
-                width: 115,
-                height: 115,
+                width: 120,
+                height: 120,
                 colorDark: '#0b2533',
-                colorLight: '#ffffff'
+                colorLight: '#ffffff',
+                correctLevel: QRCode.CorrectLevel.L
             });
         }
         document.getElementById('profile-present').textContent = String(student.presentDays);
