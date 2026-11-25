@@ -3,34 +3,35 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script>if (new URLSearchParams(location.search).get("student")) document.documentElement.classList.add("student-page");</script>
   <title>نظام أثر | الهوية المدرسية الذكية</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="redesign.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 <body>
   <header class="top-header">
     <div class="container header-content">
       <div>
-        <h1>🪪 نظام أثر | الهوية المدرسية الذكية</h1>
+        <h1>أثر <span>لوحة المدرسة</span></h1>
         <p>التحضير الإلكتروني والتعرف على الطلاب وتوثيق إنجازاتهم بتقنية QR Code</p>
       </div>
-      <div class="project-badge">إعداد: فايز الحربي • التقنية والابتكار</div>
+      <div class="project-badge">إعداد الطلاب: فايز الحربي - علي المتحمي</div>
     </div>
   </header>
 
   <main id="student-portal-view" class="container" style="display: none;">
-    <div class="panel" style="max-width: 680px; margin: 0 auto 24px;">
-      <div class="smart-id-card" style="margin-bottom: 18px;">
+    <div class="portal-layout">
+      <header class="smart-id-card portal-hero">
         <div class="id-card-header">
-          <span class="id-card-tag">🪪 بوابة الطالب الرقمية | نظام أثر</span>
+          <span class="id-card-tag">أثر / الملف الطلابي</span>
           <span class="id-card-year">1448 هـ</span>
         </div>
         <div class="id-card-body">
           <div class="id-card-info">
-            <small class="field-label">اسم الطالب</small>
-            <h3 id="portal-student-name">—</h3>
+            <h1 id="portal-student-name" dir="auto">—</h1>
             <small class="field-label">الصف والشعبة</small>
             <p id="portal-student-grade">—</p>
             <div class="id-number-box">
@@ -39,8 +40,10 @@
             </div>
           </div>
         </div>
-      </div>
+      </header>
 
+      <section class="panel portal-section" aria-labelledby="portal-attendance">
+      <h2 id="portal-attendance">ملخص الحضور</h2>
       <div class="mini-stats">
         <div><span>أيام الحضور</span><strong id="portal-present">0</strong></div>
         <div><span>التأخر</span><strong id="portal-late">0</strong></div>
@@ -49,10 +52,14 @@
         <div><span>نسبة الانتظام</span><strong id="portal-rate">0%</strong></div>
       </div>
 
-      <h3 class="section-sub">🎖️ الإنجازات والشهادات الموثقة</h3>
+      </section>
+      <section class="panel portal-section">
+      <h2>الإنجازات والشهادات</h2>
       <div id="portal-achievements-list" class="achievements-grid"></div>
 
-      <h3 class="section-sub">🕒 سجل الحضور والغياب</h3>
+      </section>
+      <section class="panel portal-section">
+      <h2>سجل الحضور والغياب</h2>
       <div class="table-responsive">
         <table>
           <thead>
@@ -65,6 +72,7 @@
           <tbody id="portal-logs-list"></tbody>
         </table>
       </div>
+      </section>
     </div>
   </main>
 
