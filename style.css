@@ -10,6 +10,7 @@
   --border: #e2e8f0;
   --success: #15803d;
   --danger: #b91c1c;
+  --excused: #0369a1;
 }
 
 * {
@@ -111,14 +112,24 @@ body {
 
 .gate-controls {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   margin-top: 14px;
   flex-wrap: wrap;
 }
 
-.gate-controls select {
+.scanner-input {
   flex: 1;
-  min-width: 240px;
+  min-width: 260px;
+  border: 2px solid var(--accent);
+  background: #f0fdfa;
+  font-weight: 700;
+}
+
+.scanner-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(27, 154, 170, 0.2);
 }
 
 .gate-feedback {
@@ -195,6 +206,7 @@ input, select {
 .btn-light { background: #e2e8f0; color: var(--text); }
 .btn-present { background: #dcfce7; color: var(--success); padding: 6px 10px; }
 .btn-late { background: #fef3c7; color: var(--gold); padding: 6px 10px; }
+.btn-excused { background: #e0f2fe; color: var(--excused); padding: 6px 10px; }
 .btn-absent { background: #fee2e2; color: var(--danger); padding: 6px 10px; }
 .btn-qr { background: var(--primary); color: #fff; padding: 6px 12px; }
 .btn-delete { background: #fee2e2; color: #991b1b; padding: 6px 10px; }
@@ -245,6 +257,18 @@ th {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+.log-edit-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-select {
+  padding: 4px 8px;
+  font-size: 0.82rem;
+  border-radius: 6px;
 }
 
 .progress-wrap {
@@ -396,7 +420,7 @@ th {
 
 .mini-stats {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 10px;
   background: #f8fafc;
   padding: 12px;
@@ -469,36 +493,37 @@ th {
 }
 .status-pill.present { background: #dcfce7; color: var(--success); }
 .status-pill.late { background: #fef3c7; color: var(--gold); }
+.status-pill.excused { background: #e0f2fe; color: var(--excused); }
 .status-pill.absent { background: #fee2e2; color: var(--danger); }
+
+.empty-msg {
+  color: var(--muted);
+  font-size: 0.9rem;
+  background: #f8fafc;
+  padding: 12px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+/* تحسين عرض بوابة الطالب على شاشات الجوال */
+body.student-portal-mode .top-header {
+  padding: 18px 0;
+}
+
+@media (max-width: 600px) {
+  .mini-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .mini-stats div:last-child {
+    grid-column: span 2;
+  }
+  .top-header h1 {
+    font-size: 1.3rem;
+  }
+}
 
 @media print {
   body * { visibility: hidden; }
   #printable-card, #printable-card * { visibility: visible; }
   #printable-card { position: fixed; top: 20px; right: 20px; width: 440px; }
-}
-.btn-excused {
-  background: #e0f2fe;
-  color: #0369a1;
-  padding: 6px 10px;
-}
-
-.status-pill.excused {
-  background: #e0f2fe;
-  color: #0369a1;
-}
-
-.mini-stats {
-  grid-template-columns: repeat(5, 1fr);
-}
-
-.log-edit-cell {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.status-select {
-  padding: 4px 8px;
-  font-size: 0.82rem;
-  border-radius: 6px;
 }
