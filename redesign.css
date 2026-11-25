@@ -40,3 +40,5 @@ th, .empty-msg, .achievement-item { background: #f5eadb; }
 
   .portal-section { padding: .85rem; }
 }
+
+.awards-home nav{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;padding-block:1.25rem}.awards-home nav strong{font-size:1.6rem;margin-inline-end:auto}.awards-home a:not(.btn){color:var(--primary)}.awards-home .awards-hero{background:var(--sand);padding:clamp(1.5rem,7vw,5rem)}.awards-hero h1{font-size:clamp(2rem,7vw,4rem);line-height:1.2;margin:.5rem 0}.awards-hero .btn{text-decoration:none}.awards-home footer{padding-block:1rem;color:var(--muted)}

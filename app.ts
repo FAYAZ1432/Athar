@@ -32,7 +32,7 @@ class SmartSchoolSystem {
   constructor() {
     this.loadData();
     this.checkStudentPortalMode();
-    if (!this.isStudentPortalMode) {
+    if (!this.isStudentPortalMode && document.body.dataset.view !== 'profile') {
       this.initEventListeners();
       this.renderAll();
     }
@@ -126,7 +126,7 @@ class SmartSchoolSystem {
   }
 
   private buildStudentPortalUrl(student: Student): string {
-    const baseUrl = window.location.href.split('?')[0];
+    const baseUrl = new URL('../profile/', document.baseURI).href;
     const encodedPayload = this.encodeStudentPayload(student);
     return `${baseUrl}?student=${encodeURIComponent(student.id)}&data=${encodedPayload}`;
   }
@@ -148,13 +148,14 @@ class SmartSchoolSystem {
     const scannedId = params.get('student');
     const encodedData = params.get('data');
 
-    if (!scannedId) return;
+    if (!scannedId && document.body.dataset.view !== 'profile') return;
+    const lookupId = scannedId ?? '';
 
     this.isStudentPortalMode = true;
     document.body.classList.add('student-portal-mode');
 
-    const localStudent = this.students.find((s) => s.id.toUpperCase() === scannedId.toUpperCase());
-    const decodedStudent = encodedData ? this.decodeStudentPayload(scannedId, encodedData) : null;
+    const localStudent = this.students.find((s) => s.id.toUpperCase() === lookupId.toUpperCase());
+    const decodedStudent = encodedData ? this.decodeStudentPayload(lookupId, encodedData) : null;
     const targetStudent = localStudent || decodedStudent;
 
     const portalContainer = document.getElementById('student-portal-view') as HTMLElement;
