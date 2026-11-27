@@ -138,6 +138,12 @@ label { display: block; font-weight: 700; margin-bottom: 0.3rem; font-size: 0.9r
 
 .btn.primary { background: var(--primary); color: #fff; }
 .btn.primary:hover { background: var(--primary-light); }
+.btn.outline-primary {
+    background: #fff;
+    color: var(--primary);
+    border: 1px solid var(--primary);
+}
+.btn.outline-primary:hover { background: #eff6ff; }
 .btn.success { background: var(--secondary); color: #fff; }
 .btn.danger-outline {
     background: #fff;
@@ -146,6 +152,7 @@ label { display: block; font-weight: 700; margin-bottom: 0.3rem; font-size: 0.9r
     padding: 0.45rem 1rem;
     font-size: 0.85rem;
 }
+.btn.danger-outline:hover { background: #fef2f2; }
 .full-width { width: 100%; }
 
 .qr-scanner-box {
