@@ -1,1 +1,166 @@
-<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>أثر | معرض الإنجازات الطلابية</title><script>if(new URLSearchParams(location.search).get('student')) location.replace(new URL('profile/'+location.search,document.baseURI));</script><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&amp;display=swap"><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="redesign.css"></head><body class="container awards-home"><nav aria-label="التنقل الرئيسي"><strong>أثر</strong><a href="student/">مساحة الطالب</a></nav><main><header class="panel awards-hero"><span>معرض الإنجازات الطلابية</span><h1>لكل إنجاز قصة</h1><p>مساحة لعرض جوائز الطلاب وشهاداتهم والمشاريع التي يفتخرون بها.</p><a class="btn btn-primary" href="#examples">استكشف المعرض</a></header><section id="examples"><h2>نماذج من المعرض</h2><p>ملفات تجريبية لطلاب خياليين.</p><div class="stats-grid"><article class="panel"><h3><a href="demo/noura/">نورة السالم</a></h3><p>المركز الأول في معرض العلوم</p></article><article class="panel"><h3><a href="demo/omar/">عمر الحربي</a></h3><p>شهادة التميز في القراءة</p></article></div></section></main><footer>إعداد الطلاب: فايز الحربي - علي المتحمي</footer></body></html>
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام الهوية المدرسية الذكية</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- مكتبة توليد رموز QR ومكتبة مسح الكاميرا -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+</head>
+<body>
+
+    <header class="navbar" id="main-navbar">
+        <div class="logo">🎓 نظام الهوية المدرسية الذكية</div>
+        <nav class="nav-links">
+            <button class="tab-btn active" onclick="switchTab('gate')">🚪 ماسح QR البوابة</button>
+            <button class="tab-btn" onclick="switchTab('profile')">🪪 ملف الطالب</button>
+            <button class="tab-btn" onclick="switchTab('admin')">⚙️ الإدارة وتعديل الغياب</button>
+        </nav>
+    </header>
+
+    <main class="container">
+        <!-- 1. واجهة ماسح QR عند البوابة (يسجل الحضور من الأحد للخميس فقط) -->
+        <section id="gate-section" class="tab-content active">
+            <div class="card">
+                <div class="gate-header">
+                    <div>
+                        <h2>ماسح QR لتسجيل الحضور</h2>
+                        <p class="subtitle">يعمل النظام تلقائياً أيام الدراسة (من الأحد إلى الخميس فقط)</p>
+                    </div>
+                    <!-- زر لتجاوز قيد الجمعة والسبت أثناء العرض التجريبي للجنة التحكيم -->
+                    <label class="demo-toggle">
+                        <input type="checkbox" id="demo-mode-checkbox">
+                        <span>تفعيل وضع التجربة (تجاوز عطلة نهاية الأسبوع)</span>
+                    </label>
+                </div>
+                
+                <div id="reader" class="qr-scanner-box"></div>
+                
+                <div class="manual-scan">
+                    <input type="text" id="manual-id-input" placeholder="أدخل رقم الطالب أو الصق رابط الباركود (مثال: STU-101)">
+                    <button class="btn primary" onclick="handleManualScan()">مسح وتسجيل الحضور</button>
+                </div>
+
+                <div id="scan-result" class="alert hidden"></div>
+            </div>
+        </section>
+
+        <!-- 2. واجهة الملف الطلابي الرقمي (يفتح مباشرة عند مسح الباركود بالجوال) -->
+        <section id="profile-section" class="tab-content">
+            <div class="card">
+                <div class="search-profile" id="profile-search-bar">
+                    <input type="text" id="profile-search-input" placeholder="ابحث برقم الطالب لاستعراض هويته (مثال: STU-101)">
+                    <button class="btn primary" onclick="loadStudentProfile()">عرض الملف</button>
+                </div>
+
+                <div id="student-profile-view" class="profile-container hidden">
+                    <div class="profile-header">
+                        <div class="student-info">
+                            <span class="role-tag">بطاقة هوية طالب رقمية</span>
+                            <h2 id="p-name">اسم الطالب</h2>
+                            <p id="p-grade">الصف الدراسي</p>
+                            <span id="p-id" class="badge">STU-101</span>
+                        </div>
+                        <div class="qr-wrapper">
+                            <div id="p-qrcode" class="qr-box"></div>
+                            <small>امسح الرمز بالجوال لفتح الملف، أو عند البوابة للتحضير</small>
+                        </div>
+                    </div>
+
+                    <div class="stats-grid">
+                        <div class="stat-box present">
+                            <span class="stat-label">أيام الحضور</span>
+                            <strong id="p-present" class="stat-num">0</strong>
+                        </div>
+                        <div class="stat-box absent">
+                            <span class="stat-label">أيام الغياب</span>
+                            <strong id="p-absent" class="stat-num">0</strong>
+                        </div>
+                        <div class="stat-box rate">
+                            <span class="stat-label">نسبة الانتظام</span>
+                            <strong id="p-rate" class="stat-num">100%</strong>
+                        </div>
+                    </div>
+
+                    <div class="achievements-section">
+                        <h3>🏆 سجل الإنجازات والشهادات</h3>
+                        <ul id="p-achievements-list" class="achievements-list"></ul>
+                    </div>
+
+                    <div class="attendance-log-section">
+                        <h3>🕒 سجل أوقات الحضور (الأحد - الخميس)</h3>
+                        <ul id="p-logs-list" class="logs-list"></ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 3. لوحة الإدارة: إضافة طلاب، تعديل الغياب، وإضافة إنجازات -->
+        <section id="admin-section" class="tab-content">
+            <div class="admin-grid">
+                <!-- إصدار بطاقة طالب جديد -->
+                <div class="card">
+                    <h3>➕ إضافة طالب وتوليد باركود</h3>
+                    <form onsubmit="addNewStudent(event)">
+                        <label>رقم الطالب (ID)</label>
+                        <input type="text" id="new-id" required placeholder="مثال: STU-103">
+                        
+                        <label>اسم الطالب</label>
+                        <input type="text" id="new-name" required placeholder="الاسم الرباعي">
+                        
+                        <label>الصف الدراسي</label>
+                        <input type="text" id="new-grade" required placeholder="مثال: الثالث ثانوي">
+                        
+                        <button type="submit" class="btn primary full-width">حفظ وإنشاء الباركود</button>
+                    </form>
+                </div>
+
+                <!-- مكان خاص لوضع الإنجازات -->
+                <div class="card">
+                    <h3>🏅 مكان وضع الإنجازات والشهادات</h3>
+                    <form onsubmit="addAchievement(event)">
+                        <label>اختر الطالب</label>
+                        <select id="select-student" required></select>
+                        
+                        <label>وصف الإنجاز أو الجائزة</label>
+                        <input type="text" id="ach-title" required placeholder="مثال: المركز الأول في مسابقة الروبوت">
+                        
+                        <label>تاريخ الإنجاز</label>
+                        <input type="date" id="ach-date" required>
+                        
+                        <button type="submit" class="btn success full-width">إضافة الإنجاز لملف الطالب</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- جدول الإدارة وتعديل الغياب -->
+            <div class="card mt-20">
+                <h3>📋 سجل الطلاب وتعديل الغياب والحضور</h3>
+                <div class="table-responsive">
+                    <table class="students-table">
+                        <thead>
+                            <tr>
+                                <th>الرقم</th>
+                                <th>اسم الطالب</th>
+                                <th>الصف</th>
+                                <th>الحضور</th>
+                                <th>تعديل الغياب</th>
+                                <th>الباركود والملف</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-students-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>إعداد وتصميم: <strong>فايز الحربي</strong> و <strong>علي المتحمي</strong> | مجال التقنية والابتكار - الموهوبون 1448هـ</p>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>
