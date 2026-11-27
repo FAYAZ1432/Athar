@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>نظام الهوية المدرسية الذكية</title>
     <link rel="stylesheet" href="style.css">
-    <!-- مكتبة توليد رموز QR ومكتبة مسح الكاميرا -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
 </head>
@@ -14,57 +13,39 @@
     <header class="navbar" id="main-navbar">
         <div class="logo">🎓 نظام الهوية المدرسية الذكية</div>
         <nav class="nav-links">
-            <button class="tab-btn active" onclick="switchTab('gate')">🚪 ماسح QR البوابة</button>
-            <button class="tab-btn" onclick="switchTab('profile')">🪪 ملف الطالب</button>
-            <button class="tab-btn" onclick="switchTab('admin')">⚙️ الإدارة وتعديل الغياب</button>
+            <button class="tab-btn active" id="nav-student-btn" onclick="openStudentPage()">🪪 بوابة الطلاب (عرض الملف والإنجازات)</button>
+            <button class="tab-btn" id="nav-admin-btn" onclick="openAdminPage()">🔐 بوابة المشرف</button>
         </nav>
     </header>
 
     <main class="container">
-        <!-- 1. واجهة ماسح QR عند البوابة (الأحد - الخميس فقط) -->
-        <section id="gate-section" class="tab-content active">
+
+        <!-- ==========================================
+             1. صفحة الطلاب (عرض الملف والإنجازات فقط)
+             ========================================== -->
+        <section id="student-page" class="page-view active">
             <div class="card">
-                <div class="gate-header">
-                    <div>
-                        <h2>ماسح QR لتسجيل الحضور</h2>
-                        <p class="subtitle" id="current-day-banner">جاري التحقق من يوم الأسبوع...</p>
+                <div id="student-search-box">
+                    <h2>🪪 بوابة الاستعلام عن الملف الطلابي</h2>
+                    <p class="subtitle">أدخل رقمك المدرسي أو امسح بطاقة الهوية الذكية بالجوال لعرض سجل الانتظام والإنجازات</p>
+                    <div class="search-profile">
+                        <input type="text" id="student-search-input" placeholder="أدخل رقم الطالب (مثال: STU-101)">
+                        <button class="btn primary" onclick="handleStudentSearch()">عرض ملفي</button>
                     </div>
-                    <label class="demo-toggle">
-                        <input type="checkbox" id="demo-mode-checkbox">
-                        <span>تفعيل وضع التجربة (تجاوز عطلة الجمعة والسبت)</span>
-                    </label>
-                </div>
-                
-                <div id="reader" class="qr-scanner-box"></div>
-                
-                <div class="manual-scan">
-                    <input type="text" id="manual-id-input" placeholder="أدخل رقم الطالب (مثال: STU-101) أو الصق رابط الباركود">
-                    <button class="btn primary" onclick="handleManualScan()">مسح وتسجيل الحضور</button>
                 </div>
 
-                <div id="scan-result" class="alert hidden"></div>
-            </div>
-        </section>
-
-        <!-- 2. واجهة الملف الطلابي الرقمي (عرض فقط عند المسح بالجوال) -->
-        <section id="profile-section" class="tab-content">
-            <div class="card">
-                <div class="search-profile" id="profile-search-bar">
-                    <input type="text" id="profile-search-input" placeholder="أدخل رقم الطالب لعرض ملفه (مثال: STU-101)">
-                    <button class="btn primary" onclick="handleProfileSearch()">عرض الملف</button>
-                </div>
-
+                <!-- بطاقة الطالب -->
                 <div id="student-profile-view" class="profile-container hidden">
                     <div class="profile-header">
                         <div class="student-info">
-                            <span class="role-tag">🪪 بطاقة الهوية المدرسية الرقمية</span>
+                            <span class="role-tag">بطاقة الهوية المدرسية الرقمية</span>
                             <h2 id="p-name">اسم الطالب</h2>
                             <p id="p-grade">الصف الدراسي</p>
                             <span id="p-id" class="badge">STU-101</span>
                         </div>
                         <div class="qr-wrapper">
                             <div id="p-qrcode" class="qr-box"></div>
-                            <small>امسح بالجوال لفتح الملف، أو عند البوابة للتحضير</small>
+                            <small>باركود الطالب (يفتح الملف بالجوال، ويسجل الحضور عند المشرف)</small>
                         </div>
                     </div>
 
@@ -96,46 +77,95 @@
             </div>
         </section>
 
-        <!-- 3. لوحة الإدارة -->
-        <section id="admin-section" class="tab-content">
+        <!-- ==========================================
+             2. شاشة تسجيل دخول المشرف
+             ========================================== -->
+        <section id="admin-login-page" class="page-view">
+            <div class="card login-card">
+                <h2>🔐 تسجيل دخول المشرف</h2>
+                <p class="subtitle">هذه المنطقة مخصصة للمشرف لتسجيل الطلاب، مسح الحضور، وتوثيق الإنجازات</p>
+                <form onsubmit="verifyAdminLogin(event)">
+                    <label>كلمة مرور المشرف</label>
+                    <input type="password" id="admin-password-input" required placeholder="أدخل كلمة المرور">
+                    <button type="submit" class="btn primary full-width">دخول لوحة المشرف</button>
+                </form>
+                <div id="login-error" class="alert error hidden">❌ كلمة المرور غير صحيحة!</div>
+            </div>
+        </section>
+
+        <!-- ==========================================
+             3. صفحة المشرف (التسجيل، الماسح، الغياب، الإنجازات)
+             ========================================== -->
+        <section id="admin-dashboard-page" class="page-view">
+            <div class="admin-top-bar">
+                <h2>⚙️ لوحة تحكم المشرف</h2>
+                <button class="btn danger-outline" onclick="logoutAdmin()">تسجيل خروج</button>
+            </div>
+
+            <!-- قسم ماسح QR لتسجيل الحضور (من الأحد للخميس فقط) -->
+            <div class="card mb-20">
+                <div class="gate-header">
+                    <div>
+                        <h3>🚪 ماسح QR لتسجيل الحضور</h3>
+                        <p class="subtitle" id="current-day-banner">جاري التحقق من اليوم...</p>
+                    </div>
+                    <label class="demo-toggle">
+                        <input type="checkbox" id="demo-mode-checkbox">
+                        <span>وضع التجربة (تجاوز عطلة الجمعة والسبت)</span>
+                    </label>
+                </div>
+
+                <div id="reader" class="qr-scanner-box"></div>
+
+                <div class="manual-scan">
+                    <input type="text" id="manual-id-input" placeholder="امسح الباركود بالكاميرا أو أدخل رقم الطالب يدوياً">
+                    <button class="btn primary" onclick="handleAdminScan()">تسجيل حضور</button>
+                </div>
+                <div id="scan-result" class="alert hidden"></div>
+            </div>
+
+            <!-- نماذج التسجيل والإنجازات -->
             <div class="admin-grid">
+                <!-- تسجيل طالب جديد عن طريق المشرف -->
                 <div class="card">
-                    <h3>➕ إضافة طالب وتوليد باركود</h3>
+                    <h3>➕ تسجيل طالب جديد وإصدار باركود</h3>
                     <form onsubmit="addNewStudent(event)">
                         <label>رقم الطالب (ID)</label>
-                        <input type="text" id="new-id" required placeholder="مثال: STU-103">
+                        <input type="text" id="new-id" required placeholder="مثال: STU-101">
                         
-                        <label>اسم الطالب</label>
-                        <input type="text" id="new-name" required placeholder="الاسم الرباعي">
+                        <label>اسم الطالب الرباعي</label>
+                        <input type="text" id="new-name" required placeholder="أدخل اسم الطالب">
                         
                         <label>الصف الدراسي</label>
                         <input type="text" id="new-grade" required placeholder="مثال: الثالث ثانوي">
                         
-                        <button type="submit" class="btn primary full-width">حفظ وإنشاء الباركود</button>
+                        <button type="submit" class="btn primary full-width">تسجيل الطالب وتوليد الباركود</button>
                     </form>
                 </div>
 
+                <!-- مكان وضع الإنجازات -->
                 <div class="card">
-                    <h3>🏅 مكان وضع الإنجازات والشهادات</h3>
+                    <h3>🏅 توثيق إنجاز / شهادة لطالب</h3>
                     <form onsubmit="addAchievement(event)">
                         <label>اختر الطالب</label>
                         <select id="select-student" required></select>
                         
                         <label>وصف الإنجاز أو الجائزة</label>
-                        <input type="text" id="ach-title" required placeholder="مثال: المركز الأول في مسابقة الروبوت">
+                        <input type="text" id="ach-title" required placeholder="مثال: المركز الأول في أولمبياد الإبداع">
                         
                         <label>تاريخ الإنجاز</label>
                         <input type="date" id="ach-date" required>
                         
-                        <button type="submit" class="btn success full-width">إضافة الإنجاز لملف الطالب</button>
+                        <button type="submit" class="btn success full-width">حفظ الإنجاز في ملف الطالب</button>
                     </form>
                 </div>
             </div>
 
+            <!-- جدول الطلاب وتعديل الغياب -->
             <div class="card mt-20">
                 <div class="table-header-bar">
-                    <h3>📋 سجل الطلاب وتعديل الغياب والحضور</h3>
-                    <button class="btn danger-outline" onclick="resetSystemData()">إعادة ضبط البيانات الافتراضية</button>
+                    <h3>📋 قائمة الطلاب المسجلين وتعديل الغياب</h3>
+                    <button class="btn danger-outline" onclick="clearAllStudents()">مسح جميع الطلاب</button>
                 </div>
                 <div class="table-responsive">
                     <table class="students-table">
@@ -146,7 +176,7 @@
                                 <th>الصف</th>
                                 <th>الحضور</th>
                                 <th>تعديل الغياب</th>
-                                <th>الباركود والملف</th>
+                                <th>بطاقة الطالب والباركود</th>
                             </tr>
                         </thead>
                         <tbody id="admin-students-tbody"></tbody>
@@ -154,6 +184,7 @@
                 </div>
             </div>
         </section>
+
     </main>
 
     <footer>
