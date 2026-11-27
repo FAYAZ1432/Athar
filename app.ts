@@ -112,7 +112,6 @@ function getTodayDateISO(): string {
     return `${y}-${m}-${d}`;
 }
 
-// ضبط الحدود المنطقية للتواريخ (من 2025-01-01 حتى اليوم فقط)
 function configureDateConstraints(): void {
     const today = getTodayDateISO();
     ["ach-date", "req-ach-date", "req-excuse-date"].forEach(id => {
@@ -129,7 +128,6 @@ function isValidHistoricalDate(dateStr: string): boolean {
     return Boolean(dateStr) && dateStr >= MIN_ALLOWED_DATE && dateStr <= today;
 }
 
-// التحقق التلقائي من عطلة نهاية الأسبوع (الجمعة والسبت) والإجازات المطولة
 function checkNonSchoolDay(): boolean {
     const dayOfWeek = new Date().getDay();
     if (dayOfWeek === 5 || dayOfWeek === 6) return true;
@@ -138,7 +136,6 @@ function checkNonSchoolDay(): boolean {
     return INTERNAL_HOLIDAY_RANGES.some(r => todayISO >= r.start && todayISO <= r.end);
 }
 
-// توليد QR فائق الوضوح + باركود Code128 للقارئ الليزري
 function generateSharpQrDataUrl(studentId: string, size: number = 220): string {
     const baseUrl = window.location.href.split("?")[0];
     const qrValue = `${baseUrl}?id=${encodeURIComponent(studentId.trim().toUpperCase())}`;
@@ -252,7 +249,6 @@ function setupAdminDashboard(): void {
         badge.innerText = `${currentAdmin.name} ${currentAdmin.isFounder ? "(مؤسس النظام)" : "(مشرف)"}`;
     }
 
-    // إظهار قسم إدارة المشرفين للمؤسسين (فايز الحربي وعلي المتحمي) فقط
     const foundersSection = document.getElementById("founders-supervisors-section");
     if (foundersSection) {
         if (currentAdmin.isFounder) {
@@ -279,7 +275,6 @@ function logoutAdmin(): void {
     goToPortalHome();
 }
 
-// لوحة الشرف التفاعلية (الأكثر حضوراً وانتظاماً أولاً)
 function renderLeaderboard(): void {
     const gradeFilter = (document.getElementById("lb-grade-filter") as HTMLSelectElement)?.value || "ALL";
     const classFilter = (document.getElementById("lb-class-filter") as HTMLSelectElement)?.value || "ALL";
@@ -333,7 +328,6 @@ function renderLeaderboard(): void {
     }).join("");
 }
 
-// عرض ملف الطالب وبطاقته
 function renderStudentCard(student: Student): void {
     currentViewedStudentId = student.id;
     const profileView = document.getElementById("student-profile-view")!;
@@ -388,7 +382,6 @@ function printStudentSingleCard(): void {
     setTimeout(() => document.body.classList.remove("printing-single-card"), 500);
 }
 
-// رفع الصورة الشخصية للطالب (مع ضغطها تلقائياً للحفاظ على سرعة التخزين)
 function handleStudentPhotoUpload(event: Event): void {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
@@ -419,7 +412,6 @@ function handleStudentPhotoUpload(event: Event): void {
     reader.readAsDataURL(file);
 }
 
-// إرسال طلب إنجاز أو عذر غياب من الطالب إلى المشرف
 function submitStudentRequest(event: Event, type: "ACHIEVEMENT" | "EXCUSE"): void {
     event.preventDefault();
     const student = students.find(s => s.id === currentViewedStudentId);
@@ -474,7 +466,6 @@ function playBeep(success: boolean): void {
     } catch {}
 }
 
-// قارئ الباركود المدرسي
 function recordAttendanceByScanner(rawInput: string): void {
     if (!currentAdmin) return;
 
@@ -485,7 +476,7 @@ function recordAttendanceByScanner(rawInput: string): void {
     if (checkNonSchoolDay() && !isDemoMode) {
         playBeep(false);
         resultBox.classList.add("warning");
-        resultBox.innerHTML = `⛔ اليوم عطلة نهاية أسبوع أو إجازة مطولة — التحضير التلقائي متوقف.`;
+        resultBox.innerHTML = `⛔ اليوم إجازة — التحضير التلقائي متوقف.`;
         return;
     }
 
@@ -591,7 +582,6 @@ function addAchievement(event: Event): void {
     }
 }
 
-// معالجة طلبات الطلاب الواردة (اعتماد / رفض)
 function renderAdminRequests(): void {
     const container = document.getElementById("admin-requests-list");
     const countBadge = document.getElementById("pending-requests-count");
@@ -673,7 +663,6 @@ function adjustAttendanceMetric(studentId: string, field: "presentDays" | "excus
     saveStudents();
 }
 
-// نافذة تعديل سجل الطالب لتصحيح أخطاء التحضير
 function openEditStudentModal(studentId: string): void {
     if (!currentAdmin) return;
     const student = students.find(s => s.id === studentId);
@@ -733,7 +722,6 @@ function deleteStudent(studentId: string): void {
     renderStudentIdCards();
 }
 
-// إدارة حسابات المشرفين (حصرية للمؤسسين فايز وعلي فقط)
 function addNewSupervisor(event: Event): void {
     event.preventDefault();
     if (!currentAdmin || !currentAdmin.isFounder) return;
@@ -758,7 +746,6 @@ function removeSupervisor(supName: string): void {
     const target = supervisors.find(s => s.name === supName);
     if (!target) return;
 
-    // حماية مطلقة للمؤسسين: لا يمكن لفايز أو علي إزالة أحدهما الآخر
     if (target.isFounder) {
         alert("⛔ حسابات المؤسسين (فايز الحربي وعلي المتحمي) محمية ولا يمكن إزالتها نهائياً!");
         return;
@@ -996,7 +983,7 @@ function updateDayBanner(): void {
 
     const dayName = new Date().toLocaleDateString("ar-SA", { weekday: "long" });
     dayBanner.innerHTML = checkNonSchoolDay()
-        ? `اليوم: <strong>${dayName}</strong> (${getTodayDateISO()}) — ⛔ إجازة رسمية / نهاية أسبوع (التحضير متوقف تلقائياً)`
+        ? `اليوم: <strong>${dayName}</strong> (${getTodayDateISO()}) — ⛔ اليوم إجازة (التحضير متوقف تلقائياً)`
         : `اليوم: <strong>${dayName}</strong> (${getTodayDateISO()}) — ✅ يوم دراسي فعلي (قارئ الباركود نشط)`;
 }
 
