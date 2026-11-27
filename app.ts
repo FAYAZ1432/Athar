@@ -1,841 +1,277 @@
-declare var QRCode: any;
-
-type AttendanceStatus = 'present' | 'late' | 'excused' | 'absent';
-
-interface AttendanceLog {
-  id?: string;
-  date: string;
-  time: string;
-  status: AttendanceStatus;
-  method: 'جهاز قارئ الباركود' | 'رصد إداري';
-}
-
 interface Achievement {
-  id: string;
-  title: string;
-  category: 'جائزة ابتكار' | 'شهادة تفوق' | 'مسابقة علمية' | 'مشاركة مجتمعية';
-  date: string;
-  issuer: string;
+    title: string;
+    date: string;
 }
 
 interface Student {
-  id: string;
-  fullName: string;
-  grade: string;
-  section: string;
-  presentDays: number;
-  lateDays: number;
-  excusedDays?: number;
-  absentDays: number;
-  attendanceLogs: AttendanceLog[];
-  achievements: Achievement[];
+    id: string;
+    name: string;
+    grade: string;
+    presentDays: number;
+    absentDays: number;
+    attendanceLogs: string[];
+    achievements: Achievement[];
 }
 
-class SmartSchoolSystem {
-  private students: Student[] = [];
-  private readonly STORAGE_KEY = 'athar_smart_school_permanent_v3';
-  private activeProfileId: string | null = null;
-  private isStudentPortalMode = false;
+declare var QRCode: any;
+declare var Html5QrcodeScanner: any;
 
-  constructor() {
-    this.loadData();
-    this.checkStudentPortalMode();
-    if (!this.isStudentPortalMode) {
-      this.initEventListeners();
-      this.renderAll();
+const initialStudents: Student[] = [
+    {
+        id: "STU-101",
+        name: "فايز الحربي",
+        grade: "الثالث ثانوي - الموهوبون",
+        presentDays: 45,
+        absentDays: 1,
+        attendanceLogs: ["الأحد - 06:55 ص", "الإثنين - 06:50 ص"],
+        achievements: [
+            { title: "ابتكار نظام الهوية المدرسية الذكية", date: "2026-11-20" },
+            { title: "شهادة تميز في البرمجة والتقنية", date: "2026-10-15" }
+        ]
+    },
+    {
+        id: "STU-102",
+        name: "علي المتحمي",
+        grade: "الثالث ثانوي - الموهوبون",
+        presentDays: 46,
+        absentDays: 0,
+        attendanceLogs: ["الأحد - 06:52 ص", "الإثنين - 06:48 ص"],
+        achievements: [
+            { title: "تصميم وتطوير نظام الهوية المدرسية الذكية", date: "2026-11-20" },
+            { title: "المركز الأول في مسابقة الابتكار التقني", date: "2026-09-28" }
+        ]
     }
-  }
-
-  private loadData(): void {
-    try {
-      const saved = localStorage.getItem(this.STORAGE_KEY);
-      if (saved !== null) {
-        const parsed = JSON.parse(saved);
-        this.students = Array.isArray(parsed)
-          ? parsed.map((s: Student) => ({
-              ...s,
-              excusedDays: typeof s.excusedDays === 'number' ? s.excusedDays : 0,
-              attendanceLogs: Array.isArray(s.attendanceLogs)
-                ? s.attendanceLogs.map((log, idx) => ({
-                    ...log,
-                    id: log.id || `LOG-${Date.now()}-${idx}`
-                  }))
-                : []
-            }))
-          : [];
-      } else {
-        this.students = [];
-        this.saveData();
-      }
-    } catch {
-      this.students = [];
-    }
-  }
-
-  private saveData(): void {
-    try {
-      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.students));
-    } catch {
-      alert('تعذر الحفظ في المتصفح. تأكد أنك لا تستخدم وضع التصفح الخفي.');
-    }
-  }
-
-  private encodeStudentPayload(student: Student): string {
-    const statusMap: Record<AttendanceStatus, string> = {
-      present: 'p',
-      late: 'l',
-      excused: 'e',
-      absent: 'a'
-    };
-
-    const ultraCompact = [
-      student.fullName,
-      student.grade,
-      student.section,
-      student.presentDays,
-      student.lateDays,
-      student.excusedDays || 0,
-      student.absentDays,
-      student.attendanceLogs.slice(0, 4).map((lg) => [
-        lg.date,
-        lg.time,
-        statusMap[lg.status] || 'p'
-      ]),
-      student.achievements.slice(0, 4).map((ac) => [
-        ac.title,
-        ac.category,
-        ac.date,
-        ac.issuer
-      ])
-    ];
-
-    const json = JSON.stringify(ultraCompact);
-    const bytes = new TextEncoder().encode(json);
-    let bin = '';
-    for (let i = 0; i < bytes.length; i++) {
-      bin += String.fromCharCode(bytes[i]);
-    }
-    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  }
-
-  private decodeStudentPayload(studentId: string, encoded: string): Student | null {
-    try {
-      const cleanEncoded = encoded.trim().replace(/\s+/g, '');
-      let b64 = cleanEncoded.replace(/-/g, '+').replace(/_/g, '/');
-      while (b64.length % 4) b64 += '=';
-
-      const bin = atob(b64);
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) {
-        bytes[i] = bin.charCodeAt(i);
-      }
-      const json = new TextDecoder().decode(bytes);
-      const arr = JSON.parse(json);
-
-      const revStatus: Record<string, AttendanceStatus> = {
-        p: 'present',
-        l: 'late',
-        e: 'excused',
-        a: 'absent'
-      };
-
-      if (Array.isArray(arr)) {
-        return {
-          id: studentId,
-          fullName: String(arr[0] || 'طالب مسجل'),
-          grade: String(arr[1] || '—'),
-          section: String(arr[2] || '—'),
-          presentDays: Number(arr[3] || 0),
-          lateDays: Number(arr[4] || 0),
-          excusedDays: Number(arr[5] || 0),
-          absentDays: Number(arr[6] || 0),
-          attendanceLogs: Array.isArray(arr[7])
-            ? arr[7].map((lg: any) => ({
-                date: String(lg[0] || ''),
-                time: String(lg[1] || '—'),
-                status: revStatus[lg[2]] || 'present',
-                method: 'جهاز قارئ الباركود'
-              }))
-            : [],
-          achievements: Array.isArray(arr[8])
-            ? arr[8].map((ac: any, idx: number) => ({
-                id: `ACH-${idx}`,
-                title: String(ac[0] || ''),
-                category: (ac[1] || 'شهادة تفوق') as Achievement['category'],
-                date: String(ac[2] || ''),
-                issuer: String(ac[3] || 'إدارة المدرسة')
-              }))
-            : []
-        };
-      }
-      return null;
-    } catch {
-      return null;
-    }
-  }
-
-  private buildStudentPortalUrl(student: Student): string {
-    const baseUrl = window.location.href.split('?')[0];
-    const encodedPayload = this.encodeStudentPayload(student);
-    return `${baseUrl}?student=${encodeURIComponent(student.id)}&data=${encodedPayload}`;
-  }
-
-  public copyStudentPortalUrl(): void {
-    if (!this.activeProfileId) return;
-    const student = this.students.find((s) => s.id === this.activeProfileId);
-    if (!student) return;
-
-    const url = this.buildStudentPortalUrl(student);
-    navigator.clipboard
-      .writeText(url)
-      .then(() => alert('✅ تم نسخ رابط بوابة الطالب بنجاح! يمكنك إرساله الآن عبر الواتساب.'))
-      .catch(() => prompt('انسخ الرابط التالي يدوياً:', url));
-  }
-
-  private checkStudentPortalMode(): void {
-    const params = new URLSearchParams(window.location.search);
-    const scannedId = params.get('student');
-    const encodedData = params.get('data');
-
-    if (!scannedId) return;
-
-    this.isStudentPortalMode = true;
-    document.body.classList.add('student-portal-mode');
-
-    const localStudent = this.students.find((s) => s.id.toUpperCase() === scannedId.toUpperCase());
-    const decodedStudent = encodedData ? this.decodeStudentPayload(scannedId, encodedData) : null;
-    const targetStudent = localStudent || decodedStudent;
-
-    const portalContainer = document.getElementById('student-portal-view') as HTMLElement;
-    const adminContainer = document.getElementById('admin-dashboard-view') as HTMLElement;
-    if (adminContainer) adminContainer.style.display = 'none';
-    if (portalContainer) portalContainer.style.display = 'block';
-
-    if (!targetStudent) {
-      portalContainer.innerHTML = `
-        <div class="panel" style="text-align:center; padding:32px; margin-top:24px;">
-          <h2>⚠️ تعذر قراءة بيانات البطاقة</h2>
-          <p>الرقم التعريفي: <strong>${scannedId}</strong></p>
-          <p style="color:#64748b; font-size:0.9rem;">يرجى إعادة فتح البطاقة من جهاز المدرسة لتوليد رمز QR محدّث ثم مسحه مرة أخرى.</p>
-        </div>
-      `;
-      return;
-    }
-
-    this.renderStudentPortal(targetStudent);
-  }
-
-  private renderStudentPortal(student: Student): void {
-    const rate = this.calculateAttendanceRate(student);
-    const excused = student.excusedDays || 0;
-
-    (document.getElementById('portal-student-name') as HTMLElement).textContent = student.fullName;
-    (document.getElementById('portal-student-grade') as HTMLElement).textContent = `${student.grade} — ${student.section}`;
-    (document.getElementById('portal-student-id') as HTMLElement).textContent = student.id;
-
-    (document.getElementById('portal-present') as HTMLElement).textContent = String(student.presentDays);
-    (document.getElementById('portal-late') as HTMLElement).textContent = String(student.lateDays);
-    (document.getElementById('portal-excused') as HTMLElement).textContent = String(excused);
-    (document.getElementById('portal-absent') as HTMLElement).textContent = String(student.absentDays);
-    (document.getElementById('portal-rate') as HTMLElement).textContent = `${rate}%`;
-
-    const achList = document.getElementById('portal-achievements-list') as HTMLElement;
-    if (student.achievements.length === 0) {
-      achList.innerHTML = `<p class="empty-msg">لا توجد إنجازات مسجلة في ملفك حتى الآن.</p>`;
-    } else {
-      achList.innerHTML = student.achievements
-        .map(
-          (ach) => `
-          <div class="achievement-item">
-            <span class="badge-category">${ach.category}</span>
-            <h4>${ach.title}</h4>
-            <small>الجهة المانحة: ${ach.issuer} | التاريخ: ${ach.date}</small>
-          </div>
-        `
-        )
-        .join('');
-    }
-
-    const logsList = document.getElementById('portal-logs-list') as HTMLElement;
-    if (student.attendanceLogs.length === 0) {
-      logsList.innerHTML = `
-        <tr>
-          <td colspan="3" style="text-align: center; color: #64748b; padding: 14px;">
-            لا توجد سجلات حضور أو غياب مسجلة بعد.
-          </td>
-        </tr>
-      `;
-    } else {
-      logsList.innerHTML = student.attendanceLogs
-        .map((log) => {
-          const label =
-            log.status === 'present'
-              ? 'حاضر'
-              : log.status === 'late'
-              ? 'متأخر'
-              : log.status === 'excused'
-              ? 'بعذر'
-              : 'غائب';
-          return `
-            <tr>
-              <td>${log.date}</td>
-              <td>${log.time}</td>
-              <td><span class="status-pill ${log.status}">${label}</span></td>
-            </tr>
-          `;
-        })
-        .join('');
-    }
-  }
-
-  private recalculateStats(student: Student): void {
-    student.presentDays = student.attendanceLogs.filter((l) => l.status === 'present').length;
-    student.lateDays = student.attendanceLogs.filter((l) => l.status === 'late').length;
-    student.excusedDays = student.attendanceLogs.filter((l) => l.status === 'excused').length;
-    student.absentDays = student.attendanceLogs.filter((l) => l.status === 'absent').length;
-  }
-
-  private calculateAttendanceRate(student: Student): number {
-    const excused = student.excusedDays || 0;
-    const effectiveTotal = student.presentDays + student.lateDays + student.absentDays;
-    if (effectiveTotal === 0) {
-      return excused > 0 ? 100 : 0;
-    }
-    const weightedPresent = student.presentDays + student.lateDays * 0.5;
-    return Math.round((weightedPresent / effectiveTotal) * 100);
-  }
-
-  private normalizeArabicKeyboard(raw: string): string {
-    const map: Record<string, string> = {
-      'ض': 'q', 'ص': 'w', 'ث': 'e', 'ق': 'r', 'ف': 't', 'غ': 'y', 'ع': 'u', 'ه': 'i', 'خ': 'o', 'ح': 'p',
-      'ش': 'a', 'س': 's', 'ي': 'd', 'ب': 'f', 'ل': 'g', 'ا': 'h', 'ت': 'j', 'ن': 'k', 'م': 'l', 'ك': ':',
-      'ئ': 'z', 'ء': 'x', 'ؤ': 'c', 'ر': 'v', 'ى': 'n', 'ة': 'm', 'و': ',', 'ز': '.', 'ظ': '/', '؟': '?'
-    };
-    const replacedLamAlef = raw.replace(/لا/g, 'b');
-    return replacedLamAlef
-      .split('')
-      .map((ch) => map[ch] || ch)
-      .join('');
-  }
-
-  private extractStudentId(rawInput: string): string {
-    const normalized = this.normalizeArabicKeyboard(rawInput.trim());
-    const urlMatch = normalized.match(/[?&]student=([^&]+)/i);
-    if (urlMatch && urlMatch[1]) {
-      return decodeURIComponent(urlMatch[1]).trim().toUpperCase();
-    }
-    return normalized.toUpperCase();
-  }
-
-  private playBeep(isSuccess: boolean): void {
-    try {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = new AudioCtx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = isSuccess ? 'sine' : 'sawtooth';
-      osc.frequency.setValueAtTime(isSuccess ? 880 : 240, ctx.currentTime);
-      gain.gain.setValueAtTime(0.15, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (isSuccess ? 0.18 : 0.35));
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + (isSuccess ? 0.18 : 0.35));
-    } catch {
-      // تجاهل في حال عدم دعم الصوت
-    }
-  }
-
-  public scanAtGate(rawCode: string): void {
-    const extractedId = this.extractStudentId(rawCode);
-    if (!extractedId) return;
-
-    const student = this.students.find((s) => s.id.toUpperCase() === extractedId);
-    const feedbackEl = document.getElementById('gate-feedback') as HTMLElement;
-
-    if (!student) {
-      this.playBeep(false);
-      feedbackEl.className = 'gate-feedback error';
-      feedbackEl.innerHTML = `❌ الباركود غير مسجل في النظام: <strong>${extractedId}</strong>`;
-      return;
-    }
-
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
-    const dateStr = now.toLocaleDateString('ar-SA');
-
-    const alreadyScannedToday = student.attendanceLogs.find(
-      (log) => log.date === dateStr && (log.status === 'present' || log.status === 'late')
-    );
-
-    if (alreadyScannedToday) {
-      this.playBeep(false);
-      feedbackEl.className = 'gate-feedback error';
-      feedbackEl.innerHTML = `
-        <div>
-          ⚠️ <strong>تم تسجيل حضور هذا الطالب مسبقاً اليوم!</strong><br>
-          <span>الطالب: <b>${student.fullName}</b> — سُجِّل في الساعة <b>${alreadyScannedToday.time}</b> (لن يُحتسب مرتين).</span>
-        </div>
-        <button class="btn btn-sm btn-light" onclick="schoolApp.openStudentProfile('${student.id}')">عرض البطاقة</button>
-      `;
-      return;
-    }
-
-    student.attendanceLogs.unshift({
-      id: `LOG-${Date.now()}`,
-      date: dateStr,
-      time: timeStr,
-      status: 'present',
-      method: 'جهاز قارئ الباركود'
-    });
-
-    this.recalculateStats(student);
-    this.saveData();
-    this.renderAll();
-    this.playBeep(true);
-
-    feedbackEl.className = 'gate-feedback success';
-    feedbackEl.innerHTML = `
-      <div>
-        ✅ <strong>تم مسح الباركود وتسجيل الحضور بنجاح!</strong><br>
-        <span>الطالب: <b>${student.fullName}</b> (${student.grade}) — وقت الدخول: <b>${timeStr}</b></span>
-      </div>
-      <button class="btn btn-sm btn-light" onclick="schoolApp.openStudentProfile('${student.id}')">عرض البطاقة</button>
-    `;
-  }
-
-  public recordManualAttendance(studentId: string, status: AttendanceStatus): void {
-    const student = this.students.find((s) => s.id === studentId);
-    if (!student) return;
-
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
-    const dateStr = now.toLocaleDateString('ar-SA');
-
-    student.attendanceLogs.unshift({
-      id: `LOG-${Date.now()}`,
-      date: dateStr,
-      time: status === 'absent' || status === 'excused' ? '—' : timeStr,
-      status,
-      method: 'رصد إداري'
-    });
-
-    this.recalculateStats(student);
-    this.saveData();
-    this.renderAll();
-
-    if (this.activeProfileId === studentId) {
-      this.openStudentProfile(studentId);
-    }
-  }
-
-  public updateAttendanceLog(studentId: string, logId: string, newStatus: AttendanceStatus): void {
-    const student = this.students.find((s) => s.id === studentId);
-    if (!student) return;
-
-    const log = student.attendanceLogs.find((l) => l.id === logId);
-    if (!log) return;
-
-    log.status = newStatus;
-    log.method = 'رصد إداري';
-    if (newStatus === 'absent' || newStatus === 'excused') {
-      log.time = '—';
-    } else if (log.time === '—') {
-      log.time = new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
-    }
-
-    this.recalculateStats(student);
-    this.saveData();
-    this.renderAll();
-
-    if (this.activeProfileId === studentId) {
-      this.openStudentProfile(studentId);
-    }
-  }
-
-  public deleteAttendanceLog(studentId: string, logId: string): void {
-    const student = this.students.find((s) => s.id === studentId);
-    if (!student) return;
-
-    student.attendanceLogs = student.attendanceLogs.filter((l) => l.id !== logId);
-    this.recalculateStats(student);
-    this.saveData();
-    this.renderAll();
-
-    if (this.activeProfileId === studentId) {
-      this.openStudentProfile(studentId);
-    }
-  }
-
-  public addNewStudent(fullName: string, grade: string, section: string): void {
-    const randomNum = Math.floor(100000 + Math.random() * 899999);
-    const newStudent: Student = {
-      id: `STU-${randomNum}`,
-      fullName,
-      grade,
-      section,
-      presentDays: 0,
-      lateDays: 0,
-      excusedDays: 0,
-      absentDays: 0,
-      attendanceLogs: [],
-      achievements: []
-    };
-
-    this.students.unshift(newStudent);
-    this.saveData();
-    this.renderAll();
-    this.openStudentProfile(newStudent.id);
-  }
-
-  public deleteStudent(studentId: string): void {
-    const student = this.students.find((s) => s.id === studentId);
-    if (!student) return;
-
-    const confirmed = confirm(`هل أنت متأكد من حذف ملف الطالب "${student.fullName}" نهائياً؟`);
-    if (!confirmed) return;
-
-    this.students = this.students.filter((s) => s.id !== studentId);
-    this.saveData();
-    this.renderAll();
-
-    if (this.activeProfileId === studentId) {
-      document.getElementById('profile-modal')?.classList.remove('open');
-      this.activeProfileId = null;
-    }
-  }
-
-  public addAchievement(
-    studentId: string,
-    title: string,
-    category: Achievement['category'],
-    issuer: string
-  ): void {
-    const student = this.students.find((s) => s.id === studentId);
-    if (!student) {
-      alert('يرجى إضافة طالب أولاً قبل توثيق الإنجازات.');
-      return;
-    }
-
-    student.achievements.unshift({
-      id: `ACH-${Date.now()}`,
-      title,
-      category,
-      date: new Date().toLocaleDateString('ar-SA'),
-      issuer
-    });
-
-    this.saveData();
-    this.renderAll();
-    this.openStudentProfile(studentId);
-  }
-
-  public deleteAchievement(studentId: string, achievementId: string): void {
-    const student = this.students.find((s) => s.id === studentId);
-    if (!student) return;
-
-    student.achievements = student.achievements.filter((a) => a.id !== achievementId);
-    this.saveData();
-    this.renderAll();
-    if (this.activeProfileId === studentId) {
-      this.openStudentProfile(studentId);
-    }
-  }
-
-  public exportBackup(): void {
-    const dataStr = JSON.stringify(this.students, null, 2);
-    const blob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `athar-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-
-  public importBackup(file: File): void {
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const parsed = JSON.parse(String(event.target?.result || '[]'));
-        if (!Array.isArray(parsed)) {
-          alert('ملف النسخة الاحتياطية غير صالح.');
-          return;
+];
+
+let students: Student[] = JSON.parse(localStorage.getItem("smart_school_v2") || "null") || initialStudents;
+
+function saveData(): void {
+    localStorage.setItem("smart_school_v2", JSON.stringify(students));
+    renderAdminTable();
+    populateStudentSelect();
+}
+
+function extractStudentId(scannedData: string): string {
+    const clean = scannedData.trim();
+    if (clean.includes("student=")) {
+        try {
+            const url = new URL(clean);
+            return (url.searchParams.get("student") || "").toUpperCase();
+        } catch {
+            const parts = clean.split("student=");
+            return parts[1].split("&")[0].toUpperCase();
         }
-        this.students = parsed;
-        this.saveData();
-        this.renderAll();
-        alert(`✅ تم استعادة ${this.students.length} طالب بنجاح وحفظهم!`);
-      } catch {
-        alert('حدث خطأ أثناء قراءة الملف. تأكد من اختيار ملف JSON صحيح.');
-      }
-    };
-    reader.readAsText(file);
-  }
-
-  public openStudentProfile(studentId: string): void {
-    const student = this.students.find((s) => s.id === studentId);
-    if (!student) return;
-
-    this.activeProfileId = student.id;
-    const rate = this.calculateAttendanceRate(student);
-
-    (document.getElementById('card-student-name') as HTMLElement).textContent = student.fullName;
-    (document.getElementById('card-student-grade') as HTMLElement).textContent = `${student.grade} — ${student.section}`;
-    (document.getElementById('card-student-id') as HTMLElement).textContent = student.id;
-
-    const qrContainer = document.getElementById('card-qr-box') as HTMLElement;
-    qrContainer.innerHTML = '';
-    const profileUrl = this.buildStudentPortalUrl(student);
-
-    if (typeof QRCode !== 'undefined') {
-      try {
-        new QRCode(qrContainer, {
-          text: profileUrl,
-          width: 180,
-          height: 180,
-          colorDark: '#000000',
-          colorLight: '#ffffff',
-          correctLevel: QRCode.CorrectLevel.L
-        });
-      } catch {
-        const minimalStudent = { ...student, attendanceLogs: [], achievements: student.achievements.slice(0, 2) };
-        const fallbackUrl = this.buildStudentPortalUrl(minimalStudent);
-        new QRCode(qrContainer, {
-          text: fallbackUrl,
-          width: 180,
-          height: 180,
-          colorDark: '#000000',
-          colorLight: '#ffffff',
-          correctLevel: QRCode.CorrectLevel.L
-        });
-      }
     }
-
-    (document.getElementById('profile-present') as HTMLElement).textContent = String(student.presentDays);
-    (document.getElementById('profile-late') as HTMLElement).textContent = String(student.lateDays);
-    const excusedEl = document.getElementById('profile-excused');
-    if (excusedEl) excusedEl.textContent = String(student.excusedDays || 0);
-    (document.getElementById('profile-absent') as HTMLElement).textContent = String(student.absentDays);
-    (document.getElementById('profile-rate') as HTMLElement).textContent = `${rate}%`;
-
-    const achList = document.getElementById('profile-achievements-list') as HTMLElement;
-    if (student.achievements.length === 0) {
-      achList.innerHTML = `<p class="empty-msg">لا توجد إنجازات مسجلة بعد. يمكنك إضافة إنجاز من لوحة الإدارة.</p>`;
-    } else {
-      achList.innerHTML = student.achievements
-        .map(
-          (ach) => `
-          <div class="achievement-item">
-            <div class="ach-top-row">
-              <span class="badge-category">${ach.category}</span>
-              <button class="btn-mini-del" title="حذف الإنجاز" onclick="schoolApp.deleteAchievement('${student.id}', '${ach.id}')">✕</button>
-            </div>
-            <h4>${ach.title}</h4>
-            <small>الجهة المانحة: ${ach.issuer} | التاريخ: ${ach.date}</small>
-          </div>
-        `
-        )
-        .join('');
-    }
-
-    const logsList = document.getElementById('profile-logs-list') as HTMLElement;
-    if (student.attendanceLogs.length === 0) {
-      logsList.innerHTML = `
-        <tr>
-          <td colspan="5" style="text-align: center; color: #64748b; padding: 14px;">
-            لم يُسجَّل حضور لهذا الطالب بعد. امسح بطاقته في جهاز القارئ لتسجيل حضوره.
-          </td>
-        </tr>
-      `;
-    } else {
-      logsList.innerHTML = student.attendanceLogs
-        .slice(0, 10)
-        .map((log) => {
-          const logId = log.id || '';
-          const label =
-            log.status === 'present'
-              ? 'حاضر'
-              : log.status === 'late'
-              ? 'متأخر'
-              : log.status === 'excused'
-              ? 'بعذر'
-              : 'غائب';
-          return `
-            <tr>
-              <td>${log.date}</td>
-              <td>${log.time}</td>
-              <td><span class="status-pill ${log.status}">${label}</span></td>
-              <td>${log.method}</td>
-              <td class="log-edit-cell">
-                <select class="status-select" aria-label="تعديل الحالة" onchange="schoolApp.updateAttendanceLog('${student.id}', '${logId}', this.value)">
-                  <option value="present" ${log.status === 'present' ? 'selected' : ''}>حاضر</option>
-                  <option value="late" ${log.status === 'late' ? 'selected' : ''}>متأخر</option>
-                  <option value="excused" ${log.status === 'excused' ? 'selected' : ''}>بعذر</option>
-                  <option value="absent" ${log.status === 'absent' ? 'selected' : ''}>غائب</option>
-                </select>
-                <button class="btn-mini-del" title="حذف السجل" onclick="schoolApp.deleteAttendanceLog('${student.id}', '${logId}')">🗑️</button>
-              </td>
-            </tr>
-          `;
-        })
-        .join('');
-    }
-
-    const modal = document.getElementById('profile-modal') as HTMLElement;
-    modal.classList.add('open');
-  }
-
-  private renderAll(): void {
-    const searchInput = (document.getElementById('search-input') as HTMLInputElement)?.value.trim().toLowerCase() || '';
-    const filtered = this.students.filter(
-      (s) =>
-        s.fullName.toLowerCase().includes(searchInput) ||
-        s.id.toLowerCase().includes(searchInput) ||
-        s.grade.toLowerCase().includes(searchInput)
-    );
-
-    const totalStudents = this.students.length;
-    const totalAchievements = this.students.reduce((acc, s) => acc + s.achievements.length, 0);
-    const avgRate =
-      totalStudents === 0
-        ? 0
-        : Math.round(this.students.reduce((acc, s) => acc + this.calculateAttendanceRate(s), 0) / totalStudents);
-
-    (document.getElementById('stat-students') as HTMLElement).textContent = String(totalStudents);
-    (document.getElementById('stat-rate') as HTMLElement).textContent = `${avgRate}%`;
-    (document.getElementById('stat-achievements') as HTMLElement).textContent = String(totalAchievements);
-
-    const achSelect = document.getElementById('ach-student-select') as HTMLSelectElement;
-    if (this.students.length === 0) {
-      achSelect.innerHTML = `<option value="">لا يوجد طلاب مسجلون حالياً</option>`;
-    } else {
-      achSelect.innerHTML = this.students
-        .map((s) => `<option value="${s.id}">${s.fullName} (${s.id})</option>`)
-        .join('');
-    }
-
-    const tbody = document.getElementById('students-tbody') as HTMLElement;
-    if (filtered.length === 0) {
-      tbody.innerHTML = `
-        <tr>
-          <td colspan="6" style="text-align: center; color: #64748b; padding: 24px;">
-            لا يوجد طلاب في السجل حالياً. أضف طالباً جديداً من النموذج أعلاه وسيتم حفظه تلقائياً.
-          </td>
-        </tr>
-      `;
-      return;
-    }
-
-    tbody.innerHTML = filtered
-      .map((student) => {
-        const rate = this.calculateAttendanceRate(student);
-        const excused = student.excusedDays || 0;
-        return `
-          <tr>
-            <td><strong>${student.id}</strong></td>
-            <td>${student.fullName}</td>
-            <td>${student.grade} (${student.section})</td>
-            <td>
-              <div class="progress-wrap">
-                <div class="progress-bar" style="width: ${rate}%"></div>
-              </div>
-              <small>${rate}% (${student.presentDays} حضور / ${excused} بعذر / ${student.absentDays} غياب)</small>
-            </td>
-            <td><span class="ach-count">🏆 ${student.achievements.length}</span></td>
-            <td class="actions-cell">
-              <button class="btn btn-present" onclick="schoolApp.recordManualAttendance('${student.id}', 'present')">حاضر</button>
-              <button class="btn btn-late" onclick="schoolApp.recordManualAttendance('${student.id}', 'late')">متأخر</button>
-              <button class="btn btn-excused" onclick="schoolApp.recordManualAttendance('${student.id}', 'excused')">بعذر</button>
-              <button class="btn btn-absent" onclick="schoolApp.recordManualAttendance('${student.id}', 'absent')">غائب</button>
-              <button class="btn btn-qr" onclick="schoolApp.openStudentProfile('${student.id}')">🪪 البطاقة والتعديل</button>
-              <button class="btn btn-delete" onclick="schoolApp.deleteStudent('${student.id}')">🗑️ حذف</button>
-            </td>
-          </tr>
-        `;
-      })
-      .join('');
-  }
-
-  private initEventListeners(): void {
-    const scannerInput = document.getElementById('barcode-scanner-input') as HTMLInputElement;
-    const scanBtn = document.getElementById('gate-scan-btn') as HTMLButtonElement;
-    const gatePanel = document.querySelector('.gate-panel') as HTMLElement;
-
-    const triggerBarcodeRead = () => {
-      if (!scannerInput.value.trim()) return;
-      this.scanAtGate(scannerInput.value);
-      scannerInput.value = '';
-      scannerInput.focus();
-    };
-
-    scannerInput?.addEventListener('keydown', (e: KeyboardEvent) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        triggerBarcodeRead();
-      }
-    });
-
-    scanBtn?.addEventListener('click', () => triggerBarcodeRead());
-
-    gatePanel?.addEventListener('click', (e) => {
-      if ((e.target as HTMLElement).tagName !== 'BUTTON') {
-        scannerInput?.focus();
-      }
-    });
-
-    document.getElementById('search-input')?.addEventListener('input', () => this.renderAll());
-
-    document.getElementById('add-student-form')?.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const nameInput = document.getElementById('new-student-name') as HTMLInputElement;
-      const gradeInput = document.getElementById('new-student-grade') as HTMLSelectElement;
-      const sectionInput = document.getElementById('new-student-section') as HTMLInputElement;
-
-      if (nameInput.value.trim()) {
-        this.addNewStudent(nameInput.value.trim(), gradeInput.value, sectionInput.value.trim() || 'عام');
-        nameInput.value = '';
-        sectionInput.value = '';
-      }
-    });
-
-    document.getElementById('add-ach-form')?.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const studentSelect = document.getElementById('ach-student-select') as HTMLSelectElement;
-      const titleInput = document.getElementById('ach-title') as HTMLInputElement;
-      const catSelect = document.getElementById('ach-category') as HTMLSelectElement;
-      const issuerInput = document.getElementById('ach-issuer') as HTMLInputElement;
-
-      if (titleInput.value.trim()) {
-        this.addAchievement(
-          studentSelect.value,
-          titleInput.value.trim(),
-          catSelect.value as Achievement['category'],
-          issuerInput.value.trim() || 'إدارة المدرسة'
-        );
-        titleInput.value = '';
-        issuerInput.value = '';
-      }
-    });
-
-    document.getElementById('export-btn')?.addEventListener('click', () => this.exportBackup());
-
-    document.getElementById('import-input')?.addEventListener('change', (e) => {
-      const target = e.target as HTMLInputElement;
-      if (target.files && target.files[0]) {
-        this.importBackup(target.files[0]);
-        target.value = '';
-      }
-    });
-
-    document.getElementById('close-modal-btn')?.addEventListener('click', () => {
-      document.getElementById('profile-modal')?.classList.remove('open');
-      this.activeProfileId = null;
-      scannerInput?.focus();
-    });
-  }
+    return clean.toUpperCase();
 }
 
-const schoolApp = new SmartSchoolSystem();
-(window as any).schoolApp = schoolApp;
+function generateStudentProfileUrl(studentId: string): string {
+    const baseUrl = window.location.href.split("?")[0];
+    return `${baseUrl}?student=${studentId}`;
+}
+
+function switchTab(tabName: string): void {
+    document.querySelectorAll(".tab-content").forEach(el => el.classList.remove("active"));
+    document.querySelectorAll(".tab-btn").forEach(el => el.classList.remove("active"));
+
+    const targetSection = document.getElementById(`${tabName}-section`);
+    if (targetSection) targetSection.classList.add("active");
+
+    const buttons = document.querySelectorAll(".tab-btn");
+    if (tabName === "gate") buttons[0].classList.add("active");
+    if (tabName === "profile") buttons[1].classList.add("active");
+    if (tabName === "admin") buttons[2].classList.add("active");
+}
+
+function recordAttendance(rawInput: string): void {
+    const resultBox = document.getElementById("scan-result")!;
+    resultBox.classList.remove("hidden", "success", "error", "warning");
+
+    // 0 = الأحد، 1 = الإثنين، 2 = الثلاثاء، 3 = الأربعاء، 4 = الخميس
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const isDemoMode = (document.getElementById("demo-mode-checkbox") as HTMLInputElement)?.checked;
+
+    if ((dayOfWeek === 5 || dayOfWeek === 6) && !isDemoMode) {
+        resultBox.classList.add("warning");
+        resultBox.innerText = "⛔ عذراً، التحضير متاح في أيام الدراسة فقط (من الأحد إلى الخميس).";
+        return;
+    }
+
+    const studentId = extractStudentId(rawInput);
+    const student = students.find(s => s.id === studentId);
+
+    if (!student) {
+        resultBox.classList.add("error");
+        resultBox.innerText = `❌ الباركود غير مسجل في النظام: ${studentId}`;
+        return;
+    }
+
+    const dayName = now.toLocaleDateString("ar-SA", { weekday: "long" });
+    const timeString = `${dayName} (${now.toLocaleDateString("ar-SA")}) - ${now.toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}`;
+
+    student.presentDays += 1;
+    student.attendanceLogs.unshift(timeString);
+    saveData();
+
+    resultBox.classList.add("success");
+    resultBox.innerHTML = `✅ تم تسجيل حضور الطالب: <strong>${student.name}</strong> (${student.grade})<br>الوقت: ${timeString}`;
+}
+
+function handleManualScan(): void {
+    const input = document.getElementById("manual-id-input") as HTMLInputElement;
+    if (input.value) {
+        recordAttendance(input.value);
+        input.value = "";
+    }
+}
+
+function loadStudentProfile(studentIdParam?: string): void {
+    const input = document.getElementById("profile-search-input") as HTMLInputElement;
+    const targetId = extractStudentId(studentIdParam || input.value);
+    const student = students.find(s => s.id === targetId);
+    const profileView = document.getElementById("student-profile-view")!;
+
+    if (!student) {
+        alert("رقم الطالب غير موجود!");
+        profileView.classList.add("hidden");
+        return;
+    }
+
+    profileView.classList.remove("hidden");
+    document.getElementById("p-name")!.innerText = student.name;
+    document.getElementById("p-grade")!.innerText = student.grade;
+    document.getElementById("p-id")!.innerText = student.id;
+    document.getElementById("p-present")!.innerText = student.presentDays.toString();
+    document.getElementById("p-absent")!.innerText = student.absentDays.toString();
+
+    const totalDays = student.presentDays + student.absentDays;
+    const rate = totalDays > 0 ? Math.round((student.presentDays / totalDays) * 100) : 100;
+    document.getElementById("p-rate")!.innerText = `${rate}%`;
+
+    const qrContainer = document.getElementById("p-qrcode")!;
+    qrContainer.innerHTML = "";
+    new QRCode(qrContainer, {
+        text: generateStudentProfileUrl(student.id),
+        width: 120,
+        height: 120
+    });
+
+    const achList = document.getElementById("p-achievements-list")!;
+    achList.innerHTML = student.achievements.length
+        ? student.achievements.map(a => `<li>🏆 <strong>${a.title}</strong> <span style="color:#64748b; font-size:0.85rem;">(${a.date})</span></li>`).join("")
+        : "<li>لا توجد إنجازات مسجلة بعد.</li>";
+
+    const logsList = document.getElementById("p-logs-list")!;
+    logsList.innerHTML = student.attendanceLogs.length
+        ? student.attendanceLogs.slice(0, 7).map(log => `<li>✅ حضور: ${log}</li>`).join("")
+        : "<li>لا يوجد سجل حضور بعد.</li>";
+}
+
+function updateAbsence(studentId: string, change: number): void {
+    const student = students.find(s => s.id === studentId);
+    if (student) {
+        student.absentDays = Math.max(0, student.absentDays + change);
+        saveData();
+    }
+}
+
+function addNewStudent(event: Event): void {
+    event.preventDefault();
+    const id = (document.getElementById("new-id") as HTMLInputElement).value.trim().toUpperCase();
+    const name = (document.getElementById("new-name") as HTMLInputElement).value.trim();
+    const grade = (document.getElementById("new-grade") as HTMLInputElement).value.trim();
+
+    if (students.some(s => s.id === id)) {
+        alert("رقم الطالب مسجل مسبقاً!");
+        return;
+    }
+
+    students.push({
+        id,
+        name,
+        grade,
+        presentDays: 0,
+        absentDays: 0,
+        attendanceLogs: [],
+        achievements: []
+    });
+
+    saveData();
+    (event.target as HTMLFormElement).reset();
+    alert(`تم إنشاء بطاقة الطالب ${name} بنجاح!`);
+}
+
+function addAchievement(event: Event): void {
+    event.preventDefault();
+    const studentId = (document.getElementById("select-student") as HTMLSelectElement).value;
+    const title = (document.getElementById("ach-title") as HTMLInputElement).value.trim();
+    const date = (document.getElementById("ach-date") as HTMLInputElement).value;
+
+    const student = students.find(s => s.id === studentId);
+    if (student) {
+        student.achievements.unshift({ title, date });
+        saveData();
+        (event.target as HTMLFormElement).reset();
+        alert("تمت إضافة الإنجاز إلى ملف الطالب!");
+    }
+}
+
+function renderAdminTable(): void {
+    const tbody = document.getElementById("admin-students-tbody")!;
+    tbody.innerHTML = students.map(s => `
+        <tr>
+            <td><strong>${s.id}</strong></td>
+            <td>${s.name}</td>
+            <td>${s.grade}</td>
+            <td>${s.presentDays} يوم</td>
+            <td>
+                <div class="absent-controls">
+                    <button class="btn-mini plus" title="إضافة يوم غياب" onclick="updateAbsence('${s.id}', 1)">+</button>
+                    <strong>${s.absentDays}</strong>
+                    <button class="btn-mini minus" title="إنقاص يوم غياب" onclick="updateAbsence('${s.id}', -1)">-</button>
+                </div>
+            </td>
+            <td>
+                <button class="btn primary" style="padding: 0.35rem 0.75rem; font-size:0.85rem;" 
+                onclick="switchTab('profile'); loadStudentProfile('${s.id}')">عرض الباركود والملف</button>
+            </td>
+        </tr>
+    `).join("");
+}
+
+function populateStudentSelect(): void {
+    const select = document.getElementById("select-student")!;
+    select.innerHTML = students.map(s => `<option value="${s.id}">${s.name} (${s.id})</option>`).join("");
+}
+
+window.addEventListener("DOMContentLoaded", () => {
+    saveData();
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const studentParam = urlParams.get("student");
+
+    if (studentParam) {
+        document.getElementById("main-navbar")?.classList.add("hidden");
+        document.getElementById("profile-search-bar")?.classList.add("hidden");
+        switchTab("profile");
+        loadStudentProfile(studentParam);
+        return;
+    }
+
+    try {
+        const html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 220 }, false);
+        html5QrcodeScanner.render((decodedText: string) => {
+            recordAttendance(decodedText);
+        });
+    } catch (e) {
+        console.log("الكاميرا غير متاحة.");
+    }
+});
+
+(window as any).switchTab = switchTab;
+(window as any).handleManualScan = handleManualScan;
+(window as any).loadStudentProfile = loadStudentProfile;
+(window as any).addNewStudent = addNewStudent;
+(window as any).addAchievement = addAchievement;
+(window as any).updateAbsence = updateAbsence;
