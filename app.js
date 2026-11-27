@@ -1,20 +1,5 @@
 "use strict";
-const STORAGE_KEY = "smart_school_id_v5";
-
-const defaultStudents = [
-    {
-        id: "STU-101",
-        name: "محمد أحمد العتيبي",
-        grade: "الثالث ثانوي",
-        presentDays: 42,
-        absentDays: 1,
-        attendanceLogs: ["الأحد - 06:55 ص", "الإثنين - 06:50 ص"],
-        achievements: [
-            { title: "المركز الأول في مسابقة الروبوت والذكاء الاصطناعي", date: "2026-11-15" },
-            { title: "شهادة الطالب المثالي في الانضباط المدرسي", date: "2026-10-10" }
-        ]
-    }
-];
+const STORAGE_KEY = "smart_school_id_v6";
 
 function loadStudentsFromStorage() {
     try {
@@ -26,7 +11,7 @@ function loadStudentsFromStorage() {
     } catch (e) {
         console.error("Storage read error:", e);
     }
-    return JSON.parse(JSON.stringify(defaultStudents));
+    return [];
 }
 
 let students = loadStudentsFromStorage();
@@ -252,6 +237,10 @@ function addNewStudent(event) {
 function addAchievement(event) {
     event.preventDefault();
     const studentId = document.getElementById("select-student").value;
+    if (!studentId) {
+        alert("يرجى إضافة طالب أولاً!");
+        return;
+    }
     const title = document.getElementById("ach-title").value.trim();
     const date = document.getElementById("ach-date").value;
 
@@ -265,16 +254,24 @@ function addAchievement(event) {
 }
 
 function resetSystemData() {
-    if (confirm("هل تريد استعادة البيانات الافتراضية للنظام؟")) {
+    var _a;
+    if (confirm("هل تريد مسح جميع الطلاب والبيانات من النظام؟")) {
         localStorage.removeItem(STORAGE_KEY);
-        students = loadStudentsFromStorage();
+        students = [];
         saveData();
+        (_a = document.getElementById("student-profile-view")) === null || _a === void 0 ? void 0 : _a.classList.add("hidden");
     }
 }
 
 function renderAdminTable() {
     const tbody = document.getElementById("admin-students-tbody");
     if (!tbody) return;
+
+    if (students.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#64748b; padding:1.5rem;">لا يوجد طلاب مسجلون حالياً. أضف طالباً جديداً من النموذج أعلاه.</td></tr>`;
+        return;
+    }
+
     tbody.innerHTML = students.map(s => `
         <tr>
             <td><strong>${s.id}</strong></td>
@@ -299,6 +296,10 @@ function renderAdminTable() {
 function populateStudentSelect() {
     const select = document.getElementById("select-student");
     if (!select) return;
+    if (students.length === 0) {
+        select.innerHTML = `<option value="">-- لا يوجد طلاب مسجلون --</option>`;
+        return;
+    }
     select.innerHTML = students.map(s => `<option value="${s.id}">${s.name} (${s.id})</option>`).join("");
 }
 
