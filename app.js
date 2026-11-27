@@ -1,8 +1,21 @@
 "use strict";
-const STORAGE_KEY = "smart_school_portal_v8";
+const STORAGE_KEY = "smart_school_portal_v9";
+const CUSTOM_HOLIDAYS_KEY = "smart_school_custom_holidays_v1";
 const ADMIN_PASS = "2443422";
 
+const OFFICIAL_HOLIDAYS_1448 = [
+    { name: "إجازة نهاية أسبوع مطولة (1)", start: "2026-10-15", end: "2026-10-15" },
+    { name: "إجازة الخريف (منتصف الفصل الأول)", start: "2026-11-20", end: "2026-11-28" },
+    { name: "إجازة نهاية أسبوع مطولة (2)", start: "2026-12-13", end: "2026-12-13" },
+    { name: "إجازة منتصف العام الدراسي", start: "2027-01-01", end: "2027-01-09" },
+    { name: "إجازة يوم التأسيس", start: "2027-02-22", end: "2027-02-22" },
+    { name: "إجازة عيد الفطر المبارك", start: "2027-03-05", end: "2027-03-15" },
+    { name: "إجازة عيد الأضحى المبارك", start: "2027-05-14", end: "2027-05-22" },
+    { name: "الإجازة الصيفية لنهاية العام الدراسي 1448هـ", start: "2027-05-28", end: "2027-08-21" }
+];
+
 let students = loadStudents();
+let customHolidays = loadCustomHolidays();
 let isAdminAuthenticated = false;
 let scannerInstance = null;
 let lastScanTime = 0;
@@ -10,6 +23,19 @@ let lastScanTime = 0;
 function loadStudents() {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) return parsed;
+        }
+    } catch (e) {
+        console.error(e);
+    }
+    return [];
+}
+
+function loadCustomHolidays() {
+    try {
+        const raw = localStorage.getItem(CUSTOM_HOLIDAYS_KEY);
         if (raw) {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed)) return parsed;
@@ -28,6 +54,41 @@ function saveStudents() {
     }
     renderAdminTable();
     populateStudentSelect();
+}
+
+function saveCustomHolidays() {
+    try {
+        localStorage.setItem(CUSTOM_HOLIDAYS_KEY, JSON.stringify(customHolidays));
+    } catch (e) {
+        console.error(e);
+    }
+    renderHolidaysList();
+    updateDayBanner();
+}
+
+function getTodayDateISO() {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+}
+
+function checkNonSchoolDayReason() {
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    if (dayOfWeek === 5) return "عطلة نهاية الأسبوع (الجمعة)";
+    if (dayOfWeek === 6) return "عطلة نهاية الأسبوع (السبت)";
+
+    const todayISO = getTodayDateISO();
+    const allHolidays = [...OFFICIAL_HOLIDAYS_1448, ...customHolidays];
+
+    for (const h of allHolidays) {
+        if (todayISO >= h.start && todayISO <= h.end) {
+            return h.name;
+        }
+    }
+    return null;
 }
 
 function encodeStudentData(student) {
@@ -122,6 +183,7 @@ function verifyAdminLogin(event) {
         passInput.value = "";
         showPage("admin-dashboard-page");
         saveStudents();
+        renderHolidaysList();
         initAdminScanner();
     } else {
         errorBox.classList.remove("hidden");
@@ -182,11 +244,6 @@ function handleStudentSearch() {
     renderStudentCard(student);
 }
 
-function isSchoolDay() {
-    const day = new Date().getDay();
-    return day >= 0 && day <= 4;
-}
-
 function recordAttendanceByAdmin(rawInput) {
     var _a;
     if (!isAdminAuthenticated) return;
@@ -195,11 +252,11 @@ function recordAttendanceByAdmin(rawInput) {
     resultBox.classList.remove("hidden", "success", "error", "warning");
 
     const isDemoMode = (_a = document.getElementById("demo-mode-checkbox")) === null || _a === void 0 ? void 0 : _a.checked;
+    const holidayReason = checkNonSchoolDayReason();
 
-    if (!isSchoolDay() && !isDemoMode) {
-        const dayArabic = new Date().getDay() === 5 ? "الجمعة" : "السبت";
+    if (holidayReason && !isDemoMode) {
         resultBox.classList.add("warning");
-        resultBox.innerHTML = `⛔ اليوم هو <strong>${dayArabic}</strong> (عطلة نهاية الأسبوع).<br>التحضير متاح أيام الدراسة فقط (من الأحد إلى الخميس).`;
+        resultBox.innerHTML = `⛔ التحضير متوقف اليوم بسبب: <strong>${holidayReason}</strong>.<br>يستثني النظام أيام العطل والإجازات الرسمية والصيفية تلقائياً.`;
         return;
     }
 
@@ -282,6 +339,32 @@ function addAchievement(event) {
     }
 }
 
+function addCustomHoliday(event) {
+    event.preventDefault();
+    if (!isAdminAuthenticated) return;
+
+    const name = document.getElementById("custom-holiday-name").value.trim();
+    const date = document.getElementById("custom-holiday-date").value;
+
+    customHolidays.push({ name, start: date, end: date });
+    saveCustomHolidays();
+    event.target.reset();
+    alert(`تمت إضافة "${name}" (${date}) إلى قائمة الإجازات المستثناة.`);
+}
+
+function renderHolidaysList() {
+    const list = document.getElementById("holidays-display-list");
+    if (!list) return;
+
+    const allHolidays = [...OFFICIAL_HOLIDAYS_1448, ...customHolidays];
+    list.innerHTML = allHolidays
+        .map(h => {
+            const rangeText = h.start === h.end ? h.start : `من ${h.start} إلى ${h.end}`;
+            return `<li>📅 <strong>${h.name}</strong> <span style="color:#64748b; font-size:0.85rem;">(${rangeText})</span></li>`;
+        })
+        .join("");
+}
+
 function updateAbsence(studentId, change) {
     if (!isAdminAuthenticated) return;
     const student = students.find(s => s.id === studentId);
@@ -348,15 +431,20 @@ function populateStudentSelect() {
     select.innerHTML = students.map(s => `<option value="${s.id}">${s.name} (${s.id})</option>`).join("");
 }
 
-function initAdminScanner() {
+function updateDayBanner() {
     const dayBanner = document.getElementById("current-day-banner");
-    if (dayBanner) {
-        const dayName = new Date().toLocaleDateString("ar-SA", { weekday: "long" });
-        dayBanner.innerHTML = !isSchoolDay()
-            ? `اليوم: <strong>${dayName}</strong> (عطلة نهاية الأسبوع - التحضير متوقف تلقائياً)`
-            : `اليوم: <strong>${dayName}</strong> (يوم دراسي - ماسح التحضير نشط)`;
-    }
+    if (!dayBanner) return;
 
+    const dayName = new Date().toLocaleDateString("ar-SA", { weekday: "long" });
+    const holidayReason = checkNonSchoolDayReason();
+
+    dayBanner.innerHTML = holidayReason
+        ? `اليوم: <strong>${dayName}</strong> — ⛔ مستثنى من التحضير (<strong>${holidayReason}</strong>)`
+        : `اليوم: <strong>${dayName}</strong> — ✅ يوم دراسي فعلي (ماسح التحضير نشط)`;
+}
+
+function initAdminScanner() {
+    updateDayBanner();
     if (scannerInstance) return;
     try {
         scannerInstance = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 220 }, false);
@@ -410,6 +498,7 @@ window.handleStudentSearch = handleStudentSearch;
 window.handleAdminScan = handleAdminScan;
 window.addNewStudent = addNewStudent;
 window.addAchievement = addAchievement;
+window.addCustomHoliday = addCustomHoliday;
 window.updateAbsence = updateAbsence;
 window.clearAllStudents = clearAllStudents;
 window.viewStudentFromAdmin = viewStudentFromAdmin;
