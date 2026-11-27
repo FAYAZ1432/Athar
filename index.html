@@ -21,25 +21,24 @@
     </header>
 
     <main class="container">
-        <!-- 1. واجهة ماسح QR عند البوابة (يسجل الحضور من الأحد للخميس فقط) -->
+        <!-- 1. واجهة ماسح QR عند البوابة (الأحد - الخميس فقط) -->
         <section id="gate-section" class="tab-content active">
             <div class="card">
                 <div class="gate-header">
                     <div>
                         <h2>ماسح QR لتسجيل الحضور</h2>
-                        <p class="subtitle">يعمل النظام تلقائياً أيام الدراسة (من الأحد إلى الخميس فقط)</p>
+                        <p class="subtitle" id="current-day-banner">جاري التحقق من يوم الأسبوع...</p>
                     </div>
-                    <!-- زر لتجاوز قيد الجمعة والسبت أثناء العرض التجريبي للجنة التحكيم -->
                     <label class="demo-toggle">
                         <input type="checkbox" id="demo-mode-checkbox">
-                        <span>تفعيل وضع التجربة (تجاوز عطلة نهاية الأسبوع)</span>
+                        <span>تفعيل وضع التجربة (تجاوز عطلة الجمعة والسبت)</span>
                     </label>
                 </div>
                 
                 <div id="reader" class="qr-scanner-box"></div>
                 
                 <div class="manual-scan">
-                    <input type="text" id="manual-id-input" placeholder="أدخل رقم الطالب أو الصق رابط الباركود (مثال: STU-101)">
+                    <input type="text" id="manual-id-input" placeholder="أدخل رقم الطالب (مثال: STU-101) أو الصق رابط الباركود">
                     <button class="btn primary" onclick="handleManualScan()">مسح وتسجيل الحضور</button>
                 </div>
 
@@ -47,25 +46,25 @@
             </div>
         </section>
 
-        <!-- 2. واجهة الملف الطلابي الرقمي (يفتح مباشرة عند مسح الباركود بالجوال) -->
+        <!-- 2. واجهة الملف الطلابي الرقمي (عرض فقط عند المسح بالجوال) -->
         <section id="profile-section" class="tab-content">
             <div class="card">
                 <div class="search-profile" id="profile-search-bar">
-                    <input type="text" id="profile-search-input" placeholder="ابحث برقم الطالب لاستعراض هويته (مثال: STU-101)">
-                    <button class="btn primary" onclick="loadStudentProfile()">عرض الملف</button>
+                    <input type="text" id="profile-search-input" placeholder="أدخل رقم الطالب لعرض ملفه (مثال: STU-101)">
+                    <button class="btn primary" onclick="handleProfileSearch()">عرض الملف</button>
                 </div>
 
                 <div id="student-profile-view" class="profile-container hidden">
                     <div class="profile-header">
                         <div class="student-info">
-                            <span class="role-tag">بطاقة هوية طالب رقمية</span>
+                            <span class="role-tag">🪪 بطاقة الهوية المدرسية الرقمية</span>
                             <h2 id="p-name">اسم الطالب</h2>
                             <p id="p-grade">الصف الدراسي</p>
                             <span id="p-id" class="badge">STU-101</span>
                         </div>
                         <div class="qr-wrapper">
                             <div id="p-qrcode" class="qr-box"></div>
-                            <small>امسح الرمز بالجوال لفتح الملف، أو عند البوابة للتحضير</small>
+                            <small>امسح بالجوال لفتح الملف، أو عند البوابة للتحضير</small>
                         </div>
                     </div>
 
@@ -97,10 +96,9 @@
             </div>
         </section>
 
-        <!-- 3. لوحة الإدارة: إضافة طلاب، تعديل الغياب، وإضافة إنجازات -->
+        <!-- 3. لوحة الإدارة -->
         <section id="admin-section" class="tab-content">
             <div class="admin-grid">
-                <!-- إصدار بطاقة طالب جديد -->
                 <div class="card">
                     <h3>➕ إضافة طالب وتوليد باركود</h3>
                     <form onsubmit="addNewStudent(event)">
@@ -117,7 +115,6 @@
                     </form>
                 </div>
 
-                <!-- مكان خاص لوضع الإنجازات -->
                 <div class="card">
                     <h3>🏅 مكان وضع الإنجازات والشهادات</h3>
                     <form onsubmit="addAchievement(event)">
@@ -135,9 +132,11 @@
                 </div>
             </div>
 
-            <!-- جدول الإدارة وتعديل الغياب -->
             <div class="card mt-20">
-                <h3>📋 سجل الطلاب وتعديل الغياب والحضور</h3>
+                <div class="table-header-bar">
+                    <h3>📋 سجل الطلاب وتعديل الغياب والحضور</h3>
+                    <button class="btn danger-outline" onclick="resetSystemData()">إعادة ضبط البيانات الافتراضية</button>
+                </div>
                 <div class="table-responsive">
                     <table class="students-table">
                         <thead>
