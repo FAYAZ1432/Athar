@@ -1,5 +1,5 @@
 "use strict";
-const STORAGE_KEY = "smart_school_portal_v11";
+const STORAGE_KEY = "smart_school_portal_v12";
 const ADMIN_PASS = "2443422";
 
 const UPCOMING_AND_SUMMER_HOLIDAYS = [
@@ -215,8 +215,16 @@ function recordAttendanceByScanner(rawInput) {
         return;
     }
 
+    const todayISO = getTodayDateISO();
+    if (student.lastAttendedDate === todayISO) {
+        resultBox.classList.add("warning");
+        resultBox.innerHTML = `⚠️ الطالب <strong>${student.name}</strong> (${student.id}) مسجّل حضوره مسبقاً لهذا اليوم (${todayISO}).<br>تم منع التكرار تلقائياً.`;
+        return;
+    }
+
     const timeString = getFormattedNow();
     student.presentDays += 1;
+    student.lastAttendedDate = todayISO;
     student.attendanceLogs.unshift(`✅ حضور (ماسح QR): ${timeString}`);
     saveStudents();
 
@@ -252,6 +260,7 @@ function addNewStudent(event) {
         presentDays: 0,
         excusedAbsentDays: 0,
         unexcusedAbsentDays: 0,
+        lastAttendedDate: "",
         attendanceLogs: [],
         achievements: []
     };
@@ -305,14 +314,148 @@ function adjustAttendanceMetric(studentId, field, change) {
         } else if (field === "unexcusedAbsentDays") {
             student.attendanceLogs.unshift(`🔴 غياب بدون عذر: ${timeString}`);
         }
+    } else if (field === "presentDays" && nextVal === 0) {
+        student.lastAttendedDate = "";
     }
 
     saveStudents();
 }
 
+function deleteStudent(studentId) {
+    if (!isAdminAuthenticated) return;
+    const student = students.find(s => s.id === studentId);
+    if (!student) return;
+
+    if (!confirm(`⚠️ تأكيد الحذف:\nهل أنت متأكد من حذف الطالب "${student.name}" (${student.id}) وجميع سجلاته نهائياً؟`)) {
+        return;
+    }
+
+    students = students.filter(s => s.id !== studentId);
+    saveStudents();
+    renderStudentIdCards();
+}
+
+function exportToExcelCSV() {
+    if (!isAdminAuthenticated) return;
+    if (students.length === 0) {
+        alert("لا يوجد طلاب مسجلون لتصديرهم!");
+        return;
+    }
+
+    const headers = [
+        "رقم الطالب",
+        "اسم الطالب",
+        "الصف الدراسي",
+        "أيام الحضور",
+        "غياب بعذر",
+        "غياب بدون عذر",
+        "نسبة الانتظام",
+        "عدد الإنجازات"
+    ];
+
+    const rows = students.map(s => {
+        const total = s.presentDays + s.excusedAbsentDays + s.unexcusedAbsentDays;
+        const rate = total > 0 ? Math.round((s.presentDays / total) * 100) : 100;
+        return [
+            `"${s.id}"`,
+            `"${s.name.replace(/"/g, '""')}"`,
+            `"${s.grade.replace(/"/g, '""')}"`,
+            s.presentDays,
+            s.excusedAbsentDays,
+            s.unexcusedAbsentDays,
+            `"${rate}%"`,
+            s.achievements.length
+        ].join(",");
+    });
+
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `تقرير_الحضور_والانتظام_${getTodayDateISO()}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
+function exportBackupJSON() {
+    if (!isAdminAuthenticated) return;
+    const backupData = {
+        version: "1.0",
+        exportedAt: new Date().toISOString(),
+        students: students
+    };
+
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `نسخة_احتياطية_الهوية_المدرسية_${getTodayDateISO()}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
+function triggerBackupRestore() {
+    if (!isAdminAuthenticated) return;
+    const fileInput = document.getElementById("restore-backup-input");
+    if (fileInput) {
+        fileInput.value = "";
+        fileInput.click();
+    }
+}
+
+function importBackupJSON(event) {
+    if (!isAdminAuthenticated) return;
+    const input = event.target;
+    const file = input.files && input.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const parsed = JSON.parse(String((e.target && e.target.result) || ""));
+            const restoredList = Array.isArray(parsed) ? parsed : parsed.students;
+
+            if (!Array.isArray(restoredList)) {
+                alert("❌ ملف النسخة الاحتياطية غير صالح!");
+                return;
+            }
+
+            if (!confirm(`سيتم استبدال البيانات الحالية بـ (${restoredList.length}) طالب من النسخة الاحتياطية. هل تريد المتابعة؟`)) {
+                return;
+            }
+
+            students = restoredList.map((s) => ({
+                id: String(s.id || "").toUpperCase(),
+                name: String(s.name || ""),
+                grade: String(s.grade || ""),
+                presentDays: Number(s.presentDays) || 0,
+                excusedAbsentDays: Number(s.excusedAbsentDays) || 0,
+                unexcusedAbsentDays: Number(s.unexcusedAbsentDays) || 0,
+                lastAttendedDate: String(s.lastAttendedDate || ""),
+                attendanceLogs: Array.isArray(s.attendanceLogs) ? s.attendanceLogs : [],
+                achievements: Array.isArray(s.achievements) ? s.achievements : []
+            }));
+
+            saveStudents();
+            renderStudentIdCards();
+            alert("✅ تمت استعادة النسخة الاحتياطية بنجاح!");
+        } catch (_a) {
+            alert("❌ حدث خطأ أثناء قراءة ملف النسخة الاحتياطية.");
+        }
+    };
+    reader.readAsText(file);
+}
+
 function clearAllStudents() {
     if (!isAdminAuthenticated) return;
-    if (confirm("هل أنت متأكد من مسح جميع الطلاب المسجلين؟")) {
+    if (confirm("⚠️ تأكيد المسح الشامل:\nهل أنت متأكد من مسح جميع الطلاب المسجلين وبياناتهم نهائياً؟")) {
         localStorage.removeItem(STORAGE_KEY);
         students = [];
         saveStudents();
@@ -364,8 +507,12 @@ function renderAdminTable() {
                 </div>
             </td>
             <td>
-                <button type="button" class="btn primary" style="padding: 0.35rem 0.75rem; font-size:0.85rem;" 
-                onclick="viewStudentFromAdmin('${s.id}')">عرض الملف والإنجازات</button>
+                <div style="display:flex; gap:0.4rem; align-items:center;">
+                    <button type="button" class="btn primary" style="padding: 0.35rem 0.7rem; font-size:0.85rem;" 
+                    onclick="viewStudentFromAdmin('${s.id}')">الملف</button>
+                    <button type="button" class="btn danger-outline" style="padding: 0.35rem 0.7rem; font-size:0.85rem;" 
+                    onclick="deleteStudent('${s.id}')">🗑️ حذف</button>
+                </div>
             </td>
         </tr>
     `).join("");
@@ -504,6 +651,11 @@ window.handleAdminScan = handleAdminScan;
 window.addNewStudent = addNewStudent;
 window.addAchievement = addAchievement;
 window.adjustAttendanceMetric = adjustAttendanceMetric;
+window.deleteStudent = deleteStudent;
+window.exportToExcelCSV = exportToExcelCSV;
+window.exportBackupJSON = exportBackupJSON;
+window.triggerBackupRestore = triggerBackupRestore;
+window.importBackupJSON = importBackupJSON;
 window.clearAllStudents = clearAllStudents;
 window.viewStudentFromAdmin = viewStudentFromAdmin;
 window.startCameraScanner = startCameraScanner;
