@@ -1,238 +1,166 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>نظام أثر | الهوية المدرسية الذكية</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css" />
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام الهوية المدرسية الذكية</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- مكتبة توليد رموز QR ومكتبة مسح الكاميرا -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
 </head>
 <body>
-  <header class="top-header">
-    <div class="container header-content">
-      <div>
-        <h1>🪪 نظام أثر | الهوية المدرسية الذكية</h1>
-        <p>التحضير الإلكتروني والتعرف على الطلاب وتوثيق إنجازاتهم بتقنية QR Code</p>
-      </div>
-      <div class="project-badge">إعداد: فايز الحربي • التقنية والابتكار</div>
-    </div>
-  </header>
 
-  <main id="student-portal-view" class="container" style="display: none;">
-    <div class="panel" style="max-width: 680px; margin: 0 auto 24px;">
-      <div class="smart-id-card" style="margin-bottom: 18px;">
-        <div class="id-card-header">
-          <span class="id-card-tag">🪪 بوابة الطالب الرقمية | نظام أثر</span>
-          <span class="id-card-year">1448 هـ</span>
-        </div>
-        <div class="id-card-body">
-          <div class="id-card-info">
-            <small class="field-label">اسم الطالب</small>
-            <h3 id="portal-student-name">—</h3>
-            <small class="field-label">الصف والشعبة</small>
-            <p id="portal-student-grade">—</p>
-            <div class="id-number-box">
-              <span>الرقم التعريفي:</span>
-              <code id="portal-student-id">STU-000000</code>
+    <header class="navbar" id="main-navbar">
+        <div class="logo">🎓 نظام الهوية المدرسية الذكية</div>
+        <nav class="nav-links">
+            <button class="tab-btn active" onclick="switchTab('gate')">🚪 ماسح QR البوابة</button>
+            <button class="tab-btn" onclick="switchTab('profile')">🪪 ملف الطالب</button>
+            <button class="tab-btn" onclick="switchTab('admin')">⚙️ الإدارة وتعديل الغياب</button>
+        </nav>
+    </header>
+
+    <main class="container">
+        <!-- 1. واجهة ماسح QR عند البوابة (يسجل الحضور من الأحد للخميس فقط) -->
+        <section id="gate-section" class="tab-content active">
+            <div class="card">
+                <div class="gate-header">
+                    <div>
+                        <h2>ماسح QR لتسجيل الحضور</h2>
+                        <p class="subtitle">يعمل النظام تلقائياً أيام الدراسة (من الأحد إلى الخميس فقط)</p>
+                    </div>
+                    <!-- زر لتجاوز قيد الجمعة والسبت أثناء العرض التجريبي للجنة التحكيم -->
+                    <label class="demo-toggle">
+                        <input type="checkbox" id="demo-mode-checkbox">
+                        <span>تفعيل وضع التجربة (تجاوز عطلة نهاية الأسبوع)</span>
+                    </label>
+                </div>
+                
+                <div id="reader" class="qr-scanner-box"></div>
+                
+                <div class="manual-scan">
+                    <input type="text" id="manual-id-input" placeholder="أدخل رقم الطالب أو الصق رابط الباركود (مثال: STU-101)">
+                    <button class="btn primary" onclick="handleManualScan()">مسح وتسجيل الحضور</button>
+                </div>
+
+                <div id="scan-result" class="alert hidden"></div>
             </div>
-          </div>
-        </div>
-      </div>
+        </section>
 
-      <div class="mini-stats">
-        <div><span>أيام الحضور</span><strong id="portal-present">0</strong></div>
-        <div><span>التأخر</span><strong id="portal-late">0</strong></div>
-        <div><span>بعذر</span><strong id="portal-excused">0</strong></div>
-        <div><span>الغياب</span><strong id="portal-absent">0</strong></div>
-        <div><span>نسبة الانتظام</span><strong id="portal-rate">0%</strong></div>
-      </div>
+        <!-- 2. واجهة الملف الطلابي الرقمي (يفتح مباشرة عند مسح الباركود بالجوال) -->
+        <section id="profile-section" class="tab-content">
+            <div class="card">
+                <div class="search-profile" id="profile-search-bar">
+                    <input type="text" id="profile-search-input" placeholder="ابحث برقم الطالب لاستعراض هويته (مثال: STU-101)">
+                    <button class="btn primary" onclick="loadStudentProfile()">عرض الملف</button>
+                </div>
 
-      <h3 class="section-sub">🎖️ الإنجازات والشهادات الموثقة</h3>
-      <div id="portal-achievements-list" class="achievements-grid"></div>
+                <div id="student-profile-view" class="profile-container hidden">
+                    <div class="profile-header">
+                        <div class="student-info">
+                            <span class="role-tag">بطاقة هوية طالب رقمية</span>
+                            <h2 id="p-name">اسم الطالب</h2>
+                            <p id="p-grade">الصف الدراسي</p>
+                            <span id="p-id" class="badge">STU-101</span>
+                        </div>
+                        <div class="qr-wrapper">
+                            <div id="p-qrcode" class="qr-box"></div>
+                            <small>امسح الرمز بالجوال لفتح الملف، أو عند البوابة للتحضير</small>
+                        </div>
+                    </div>
 
-      <h3 class="section-sub">🕒 سجل الحضور والغياب</h3>
-      <div class="table-responsive">
-        <table>
-          <thead>
-            <tr>
-              <th>التاريخ</th>
-              <th>الوقت</th>
-              <th>الحالة</th>
-            </tr>
-          </thead>
-          <tbody id="portal-logs-list"></tbody>
-        </table>
-      </div>
-    </div>
-  </main>
+                    <div class="stats-grid">
+                        <div class="stat-box present">
+                            <span class="stat-label">أيام الحضور</span>
+                            <strong id="p-present" class="stat-num">0</strong>
+                        </div>
+                        <div class="stat-box absent">
+                            <span class="stat-label">أيام الغياب</span>
+                            <strong id="p-absent" class="stat-num">0</strong>
+                        </div>
+                        <div class="stat-box rate">
+                            <span class="stat-label">نسبة الانتظام</span>
+                            <strong id="p-rate" class="stat-num">100%</strong>
+                        </div>
+                    </div>
 
-  <main id="admin-dashboard-view" class="container">
-    <section class="stats-grid">
-      <div class="stat-card">
-        <span class="stat-label">إجمالي الهويات الرقمية</span>
-        <strong id="stat-students">0</strong>
-      </div>
-      <div class="stat-card">
-        <span class="stat-label">متوسط نسبة الانتظام</span>
-        <strong id="stat-rate">0%</strong>
-      </div>
-      <div class="stat-card">
-        <span class="stat-label">الإنجازات والشهادات الموثقة</span>
-        <strong id="stat-achievements">0</strong>
-      </div>
-    </section>
+                    <div class="achievements-section">
+                        <h3>🏆 سجل الإنجازات والشهادات</h3>
+                        <ul id="p-achievements-list" class="achievements-list"></ul>
+                    </div>
 
-    <section class="panel gate-panel">
-      <div class="panel-header">
-        <h2>📡 جهاز التحضير الذكي (قارئ الباركود عند البوابة)</h2>
-        <span>مرّر بطاقة الطالب أمام جهاز قارئ الباركود المتصل باللابتوب لتسجيل الحضور فوراً</span>
-      </div>
-      <div class="gate-controls">
-        <input
-          type="text"
-          id="barcode-scanner-input"
-          class="scanner-input"
-          placeholder="جاهز للقراءة — امسح باركود الطالب بالجهاز الآن..."
-          autocomplete="off"
-          autofocus
-        />
-        <button id="gate-scan-btn" class="btn btn-primary">تأكيد المسح</button>
-      </div>
-      <div id="gate-feedback" class="gate-feedback"></div>
-    </section>
-
-    <section class="forms-grid">
-      <div class="panel">
-        <h3>➕ إصدار هوية رقمية لطالب جديد</h3>
-        <form id="add-student-form" class="stack-form">
-          <input type="text" id="new-student-name" placeholder="اسم الطالب الثلاثي" required />
-          <div class="row-2">
-            <select id="new-student-grade">
-              <option value="الأول الثانوي">الأول الثانوي</option>
-              <option value="الثاني الثانوي">الثاني الثانوي</option>
-              <option value="الثالث الثانوي">الثالث الثانوي</option>
-            </select>
-            <input type="text" id="new-student-section" placeholder="الشعبة (مثلاً: موهوبون - أ)" />
-          </div>
-          <button type="submit" class="btn btn-primary">إنشاء البطاقة وتوليد QR</button>
-        </form>
-      </div>
-
-      <div class="panel">
-        <h3>🏆 توثيق إنجاز أو شهادة في ملف الطالب</h3>
-        <form id="add-ach-form" class="stack-form">
-          <select id="ach-student-select" aria-label="اختر الطالب"></select>
-          <input type="text" id="ach-title" placeholder="عنوان الإنجاز أو الجائزة" required />
-          <div class="row-2">
-            <select id="ach-category">
-              <option value="جائزة ابتكار">جائزة ابتكار</option>
-              <option value="شهادة تفوق">شهادة تفوق</option>
-              <option value="مسابقة علمية">مسابقة علمية</option>
-              <option value="مشاركة مجتمعية">مشاركة مجتمعية</option>
-            </select>
-            <input type="text" id="ach-issuer" placeholder="الجهة المانحة" />
-          </div>
-          <button type="submit" class="btn btn-accent">إضافة للملف الرقمي</button>
-        </form>
-      </div>
-    </section>
-
-    <section class="panel">
-      <div class="table-toolbar">
-        <h2>📋 سجل الهويات المدرسية والانتظام</h2>
-        <div class="toolbar-actions">
-          <input type="search" id="search-input" placeholder="ابحث بالاسم أو الرقم التعريفي..." />
-          <button type="button" id="export-btn" class="btn btn-light">💾 حفظ نسخة</button>
-          <label class="btn btn-light file-label">
-            📂 استعادة نسخة
-            <input type="file" id="import-input" accept=".json" hidden />
-          </label>
-        </div>
-      </div>
-      <div class="table-responsive">
-        <table>
-          <thead>
-            <tr>
-              <th>الرقم التعريفي</th>
-              <th>اسم الطالب</th>
-              <th>الصف والشعبة</th>
-              <th>نسبة الانتظام</th>
-              <th>الإنجازات</th>
-              <th>الإجراءات السريعة</th>
-            </tr>
-          </thead>
-          <tbody id="students-tbody"></tbody>
-        </table>
-      </div>
-    </section>
-  </main>
-
-  <div id="profile-modal" class="modal-backdrop">
-    <div class="modal-card">
-      <div class="modal-top">
-        <h2>الملف الطلابي الرقمي الموحد</h2>
-        <button id="close-modal-btn" class="btn btn-light">✕ إغلاق</button>
-      </div>
-
-      <div class="smart-id-card" id="printable-card">
-        <div class="id-card-header">
-          <span class="id-card-tag">🪪 نظام أثر | الهوية المدرسية الذكية</span>
-          <span class="id-card-year">1448 هـ</span>
-        </div>
-        <div class="id-card-body">
-          <div class="id-card-info">
-            <small class="field-label">اسم الطالب</small>
-            <h3 id="card-student-name">—</h3>
-            <small class="field-label">الصف والشعبة</small>
-            <p id="card-student-grade">—</p>
-            <div class="id-number-box">
-              <span>الرقم التعريفي:</span>
-              <code id="card-student-id">STU-000000</code>
+                    <div class="attendance-log-section">
+                        <h3>🕒 سجل أوقات الحضور (الأحد - الخميس)</h3>
+                        <ul id="p-logs-list" class="logs-list"></ul>
+                    </div>
+                </div>
             </div>
-          </div>
-          <div class="id-card-qr">
-            <div id="card-qr-box"></div>
-            <small>امسح للتحضير والملف</small>
-          </div>
-        </div>
-      </div>
+        </section>
 
-      <div class="print-bar">
-        <button class="btn btn-primary" onclick="window.print()">🖨️ طباعة البطاقة الذكية</button>
-        <button class="btn btn-accent" onclick="schoolApp.copyStudentPortalUrl()">🔗 نسخ رابط بوابة الطالب</button>
-      </div>
+        <!-- 3. لوحة الإدارة: إضافة طلاب، تعديل الغياب، وإضافة إنجازات -->
+        <section id="admin-section" class="tab-content">
+            <div class="admin-grid">
+                <!-- إصدار بطاقة طالب جديد -->
+                <div class="card">
+                    <h3>➕ إضافة طالب وتوليد باركود</h3>
+                    <form onsubmit="addNewStudent(event)">
+                        <label>رقم الطالب (ID)</label>
+                        <input type="text" id="new-id" required placeholder="مثال: STU-103">
+                        
+                        <label>اسم الطالب</label>
+                        <input type="text" id="new-name" required placeholder="الاسم الرباعي">
+                        
+                        <label>الصف الدراسي</label>
+                        <input type="text" id="new-grade" required placeholder="مثال: الثالث ثانوي">
+                        
+                        <button type="submit" class="btn primary full-width">حفظ وإنشاء الباركود</button>
+                    </form>
+                </div>
 
-      <div class="mini-stats">
-        <div><span>أيام الحضور</span><strong id="profile-present">0</strong></div>
-        <div><span>التأخر</span><strong id="profile-late">0</strong></div>
-        <div><span>بعذر</span><strong id="profile-excused">0</strong></div>
-        <div><span>الغياب</span><strong id="profile-absent">0</strong></div>
-        <div><span>نسبة الانتظام</span><strong id="profile-rate">0%</strong></div>
-      </div>
+                <!-- مكان خاص لوضع الإنجازات -->
+                <div class="card">
+                    <h3>🏅 مكان وضع الإنجازات والشهادات</h3>
+                    <form onsubmit="addAchievement(event)">
+                        <label>اختر الطالب</label>
+                        <select id="select-student" required></select>
+                        
+                        <label>وصف الإنجاز أو الجائزة</label>
+                        <input type="text" id="ach-title" required placeholder="مثال: المركز الأول في مسابقة الروبوت">
+                        
+                        <label>تاريخ الإنجاز</label>
+                        <input type="date" id="ach-date" required>
+                        
+                        <button type="submit" class="btn success full-width">إضافة الإنجاز لملف الطالب</button>
+                    </form>
+                </div>
+            </div>
 
-      <h3 class="section-sub">🎖️ المسيرة التعليمية والإنجازات الموثقة</h3>
-      <div id="profile-achievements-list" class="achievements-grid"></div>
+            <!-- جدول الإدارة وتعديل الغياب -->
+            <div class="card mt-20">
+                <h3>📋 سجل الطلاب وتعديل الغياب والحضور</h3>
+                <div class="table-responsive">
+                    <table class="students-table">
+                        <thead>
+                            <tr>
+                                <th>الرقم</th>
+                                <th>اسم الطالب</th>
+                                <th>الصف</th>
+                                <th>الحضور</th>
+                                <th>تعديل الغياب</th>
+                                <th>الباركود والملف</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-students-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
 
-      <h3 class="section-sub">🕒 سجلات الدخول والحضور (قابلة للتعديل)</h3>
-      <div class="table-responsive">
-        <table>
-          <thead>
-            <tr>
-              <th>التاريخ</th>
-              <th>الوقت</th>
-              <th>الحالة</th>
-              <th>وسيلة الرصد</th>
-              <th>تعديل الحالة</th>
-            </tr>
-          </thead>
-          <tbody id="profile-logs-list"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
+    <footer>
+        <p>إعداد وتصميم: <strong>فايز الحربي</strong> و <strong>علي المتحمي</strong> | مجال التقنية والابتكار - الموهوبون 1448هـ</p>
+    </footer>
 
-  <script src="app.js"></script>
+    <script src="app.js"></script>
 </body>
 </html>
