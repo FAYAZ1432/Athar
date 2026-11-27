@@ -70,7 +70,7 @@
                     </div>
 
                     <div class="attendance-log-section">
-                        <h3>🕒 سجل أوقات الحضور (الأحد - الخميس)</h3>
+                        <h3>🕒 سجل أوقات الحضور (أيام الدراسة الفعلية)</h3>
                         <ul id="p-logs-list" class="logs-list"></ul>
                     </div>
                 </div>
@@ -94,7 +94,7 @@
         </section>
 
         <!-- ==========================================
-             3. صفحة المشرف (التسجيل، الماسح، الغياب، الإنجازات)
+             3. صفحة المشرف (التسجيل، الماسح، الإجازات، الإنجازات)
              ========================================== -->
         <section id="admin-dashboard-page" class="page-view">
             <div class="admin-top-bar">
@@ -102,16 +102,16 @@
                 <button class="btn danger-outline" onclick="logoutAdmin()">تسجيل خروج</button>
             </div>
 
-            <!-- قسم ماسح QR لتسجيل الحضور (من الأحد للخميس فقط) -->
+            <!-- قسم ماسح QR لتسجيل الحضور (يستثني العطل والإجازات الرسمية والصيفية) -->
             <div class="card mb-20">
                 <div class="gate-header">
                     <div>
                         <h3>🚪 ماسح QR لتسجيل الحضور</h3>
-                        <p class="subtitle" id="current-day-banner">جاري التحقق من اليوم...</p>
+                        <p class="subtitle" id="current-day-banner">جاري التحقق من التقويم الدراسي...</p>
                     </div>
                     <label class="demo-toggle">
                         <input type="checkbox" id="demo-mode-checkbox">
-                        <span>وضع التجربة (تجاوز عطلة الجمعة والسبت)</span>
+                        <span>وضع التجربة (تجاوز الإجازات وعطلة الأسبوع)</span>
                     </label>
                 </div>
 
@@ -159,6 +159,19 @@
                         <button type="submit" class="btn success full-width">حفظ الإنجاز في ملف الطالب</button>
                     </form>
                 </div>
+            </div>
+
+            <!-- قسم الإجازات المستثناة تلقائياً + إضافة إجازة طارئة -->
+            <div class="card mt-20">
+                <h3>📅 التقويم الدراسي والإجازات المستثناة تلقائياً من التحضير (1448هـ)</h3>
+                <p class="subtitle">النظام يوقف التحضير تلقائياً في عطلة نهاية الأسبوع (الجمعة والسبت) وفي الإجازات التالية:</p>
+                <ul id="holidays-display-list" class="logs-list"></ul>
+
+                <form onsubmit="addCustomHoliday(event)" class="manual-scan" style="margin-top: 1rem;">
+                    <input type="text" id="custom-holiday-name" required placeholder="إضافة إجازة طارئة / تعليق دراسة (مثال: تعليق أمطار)">
+                    <input type="date" id="custom-holiday-date" required style="max-width: 180px;">
+                    <button type="submit" class="btn primary">استثناء التاريخ</button>
+                </form>
             </div>
 
             <!-- جدول الطلاب وتعديل الغياب -->
