@@ -1,5 +1,5 @@
 "use strict";
-const STORAGE_KEY = "athar_school_portal_v1";
+const STORAGE_KEY = "athar_school_portal_v2";
 const ADMIN_PASS = "2443422";
 
 const UPCOMING_AND_SUMMER_HOLIDAYS = [
@@ -64,9 +64,22 @@ function checkNonSchoolDayReason() {
     return null;
 }
 
-function getFixedQrUrl(studentId) {
+function generateSharpQrDataUrl(studentId, size = 220) {
     const baseUrl = window.location.href.split("?")[0];
-    return `${baseUrl}?id=${encodeURIComponent(studentId.trim().toUpperCase())}`;
+    const qrValue = `${baseUrl}?id=${encodeURIComponent(studentId.trim().toUpperCase())}`;
+
+    if (typeof QRious !== "undefined") {
+        const qr = new QRious({
+            value: qrValue,
+            size: size,
+            level: "M",
+            padding: 16,
+            background: "#ffffff",
+            foreground: "#000000"
+        });
+        return qr.toDataURL("image/png");
+    }
+    return "";
 }
 
 function extractStudentId(input) {
@@ -76,7 +89,7 @@ function extractStudentId(input) {
             const url = new URL(clean);
             return (url.searchParams.get("id") || "").toUpperCase();
         } catch (_a) {
-            const match = clean.match(/id=([^&]+)/i);
+            const match = clean.match(/id=([^&\s]+)/i);
             return match ? decodeURIComponent(match[1]).toUpperCase() : "";
         }
     }
@@ -87,25 +100,40 @@ function showPage(pageId) {
     var _a;
     document.querySelectorAll(".page-view").forEach(el => el.classList.remove("active"));
     (_a = document.getElementById(pageId)) === null || _a === void 0 ? void 0 : _a.classList.add("active");
+
+    const backWrap = document.getElementById("header-back-btn-wrap");
+    if (backWrap) {
+        backWrap.style.display = pageId === "portal-landing-page" ? "none" : "block";
+    }
 }
 
-function openStudentPage() {
-    var _a, _b;
-    (_a = document.getElementById("nav-student-btn")) === null || _a === void 0 ? void 0 : _a.classList.add("active");
-    (_b = document.getElementById("nav-admin-btn")) === null || _b === void 0 ? void 0 : _b.classList.remove("active");
+function goToPortalHome() {
+    stopCameraScanner();
+    showPage("portal-landing-page");
+}
+
+function openStudentPortal() {
     showPage("student-page");
+    const searchInput = document.getElementById("student-search-input");
+    if (searchInput) searchInput.focus();
 }
 
-function openAdminPage() {
-    var _a, _b;
-    (_a = document.getElementById("nav-admin-btn")) === null || _a === void 0 ? void 0 : _a.classList.add("active");
-    (_b = document.getElementById("nav-student-btn")) === null || _b === void 0 ? void 0 : _b.classList.remove("active");
-
+function openAdminPortal() {
     if (isAdminAuthenticated) {
         showPage("admin-dashboard-page");
         updateDayBanner();
+        focusLaserInput();
     } else {
         showPage("admin-login-page");
+        const passInput = document.getElementById("admin-password-input");
+        if (passInput) passInput.focus();
+    }
+}
+
+function focusLaserInput() {
+    const laserInput = document.getElementById("manual-id-input");
+    if (laserInput) {
+        setTimeout(() => laserInput.focus(), 100);
     }
 }
 
@@ -124,6 +152,7 @@ function verifyAdminLogin(event) {
         renderStudentIdCards();
         renderHolidaysList();
         updateDayBanner();
+        focusLaserInput();
     } else {
         errorBox.classList.remove("hidden");
     }
@@ -132,7 +161,7 @@ function verifyAdminLogin(event) {
 function logoutAdmin() {
     isAdminAuthenticated = false;
     stopCameraScanner();
-    openStudentPage();
+    goToPortalHome();
 }
 
 function renderStudentCard(student) {
@@ -150,16 +179,10 @@ function renderStudentCard(student) {
     const rate = totalDays > 0 ? Math.round((student.presentDays / totalDays) * 100) : 100;
     document.getElementById("p-rate").innerText = `${rate}%`;
 
-    const qrContainer = document.getElementById("p-qrcode");
-    qrContainer.innerHTML = "";
-    new QRCode(qrContainer, {
-        text: getFixedQrUrl(student.id),
-        width: 155,
-        height: 155,
-        colorDark: "#000000",
-        colorLight: "#ffffff",
-        correctLevel: QRCode.CorrectLevel.M
-    });
+    const qrImg = document.getElementById("p-qrcode-img");
+    if (qrImg) {
+        qrImg.src = generateSharpQrDataUrl(student.id, 220);
+    }
 
     const achList = document.getElementById("p-achievements-list");
     achList.innerHTML = student.achievements.length
@@ -178,7 +201,7 @@ function handleStudentSearch() {
     const student = students.find(s => s.id === targetId);
 
     if (!student) {
-        alert("رقم الطالب غير مسجل في منصة أثر! يجب تسجيل الطالب أولاً من بوابة المشرف.");
+        alert("رقم الطالب غير مسجل في منصة أثر! يرجى التأكد من الرقم أو التسجيل من بوابة المشرف.");
         document.getElementById("student-profile-view").classList.add("hidden");
         return;
     }
@@ -189,6 +212,26 @@ function getFormattedNow() {
     const now = new Date();
     const dayName = now.toLocaleDateString("ar-SA", { weekday: "long" });
     return `${dayName} (${now.toLocaleDateString("ar-SA")}) - ${now.toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}`;
+}
+
+function playBeep(success) {
+    try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = success ? 880 : 320;
+        gain.gain.value = 0.12;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        setTimeout(() => {
+            osc.stop();
+            ctx.close();
+        }, success ? 150 : 300);
+    } catch (_a) {}
 }
 
 function recordAttendanceByScanner(rawInput) {
@@ -202,6 +245,7 @@ function recordAttendanceByScanner(rawInput) {
     const holidayReason = checkNonSchoolDayReason();
 
     if (holidayReason && !isDemoMode) {
+        playBeep(false);
         resultBox.classList.add("warning");
         resultBox.innerHTML = `⛔ التحضير متوقف اليوم بسبب: <strong>${holidayReason}</strong>.<br>يستثني نظام أثر أيام العطل والإجازات القادمة والصيفية تلقائياً.`;
         return;
@@ -211,6 +255,7 @@ function recordAttendanceByScanner(rawInput) {
     const student = students.find(s => s.id === studentId);
 
     if (!student) {
+        playBeep(false);
         resultBox.classList.add("error");
         resultBox.innerText = `❌ هذا الباركود غير مسجل في منصة أثر: ${studentId}`;
         return;
@@ -218,6 +263,7 @@ function recordAttendanceByScanner(rawInput) {
 
     const todayISO = getTodayDateISO();
     if (student.lastAttendedDate === todayISO) {
+        playBeep(false);
         resultBox.classList.add("warning");
         resultBox.innerHTML = `⚠️ الطالب <strong>${student.name}</strong> (${student.id}) مسجّل حضوره مسبقاً لهذا اليوم (${todayISO}).<br>تم منع التكرار تلقائياً.`;
         return;
@@ -228,6 +274,7 @@ function recordAttendanceByScanner(rawInput) {
     student.lastAttendedDate = todayISO;
     student.attendanceLogs.unshift(`✅ حضور (قارئ الباركود المدرسي): ${timeString}`);
     saveStudents();
+    playBeep(true);
 
     resultBox.classList.add("success");
     resultBox.innerHTML = `✅ تم تسجيل حضور الطالب: <strong>${student.name}</strong> (${student.grade} - فصل ${student.classroom})<br>الوقت: ${timeString}`;
@@ -235,9 +282,10 @@ function recordAttendanceByScanner(rawInput) {
 
 function handleAdminScan() {
     const input = document.getElementById("manual-id-input");
-    if (input.value) {
+    if (input.value.trim()) {
         recordAttendanceByScanner(input.value);
         input.value = "";
+        input.focus();
     }
 }
 
@@ -256,7 +304,7 @@ function addNewStudent(event) {
     }
 
     if (students.some(s => s.id === id)) {
-        alert("رقم الطالب مسجل مسبقاً!");
+        alert("الرقم المدرسي مسجل مسبقاً لطالب آخر!");
         return;
     }
 
@@ -277,7 +325,7 @@ function addNewStudent(event) {
     saveStudents();
     appendSingleIdCard(newStudent);
     event.target.reset();
-    alert(`تم تسجيل الطالب ${name} (${grade} - فصل ${classroom}) وإصدار باركود أثر الثابت بنجاح!`);
+    alert(`تم تسجيل الطالب ${name} (${grade} - فصل ${classroom}) وإصدار بطاقة أثر بالباركود الثابت بنجاح!`);
 }
 
 function addAchievement(event) {
@@ -395,7 +443,7 @@ function exportBackupJSON() {
     if (!isAdminAuthenticated) return;
     const backupData = {
         platform: "أثر",
-        version: "1.0",
+        version: "2.0",
         exportedAt: new Date().toISOString(),
         students: students
     };
@@ -478,7 +526,7 @@ function clearAllStudents() {
 function viewStudentFromAdmin(studentId) {
     const student = students.find(s => s.id === studentId);
     if (student) {
-        openStudentPage();
+        openStudentPortal();
         renderStudentCard(student);
     }
 }
@@ -521,9 +569,9 @@ function renderAdminTable() {
             </td>
             <td>
                 <div style="display:flex; gap:0.4rem; align-items:center;">
-                    <button type="button" class="btn primary" style="padding: 0.35rem 0.7rem; font-size:0.85rem;" 
+                    <button type="button" class="btn btn-primary" style="padding: 0.38rem 0.75rem; font-size:0.85rem;" 
                     onclick="viewStudentFromAdmin('${s.id}')">السجلات</button>
-                    <button type="button" class="btn danger-outline" style="padding: 0.35rem 0.7rem; font-size:0.85rem;" 
+                    <button type="button" class="btn btn-danger-outline" style="padding: 0.38rem 0.75rem; font-size:0.85rem;" 
                     onclick="deleteStudent('${s.id}')">🗑️ حذف</button>
                 </div>
             </td>
@@ -538,30 +586,20 @@ function appendSingleIdCard(student) {
     const emptyMsg = grid.querySelector(".empty-cards-msg");
     if (emptyMsg) emptyMsg.remove();
 
+    const qrDataUrl = generateSharpQrDataUrl(student.id, 240);
+
     const card = document.createElement("div");
     card.className = "student-id-card";
     card.innerHTML = `
-        <div class="id-card-top">✨ أثر | الهوية المدرسية</div>
+        <div class="id-card-top">✨ منصة أثر | الهوية المدرسية</div>
         <div class="id-card-body">
             <h4>${student.name}</h4>
             <p>${student.grade} — فصل ${student.classroom || "1"}</p>
-            <div id="fixed-qr-${student.id}" class="id-card-qr"></div>
+            <img src="${qrDataUrl}" alt="QR ${student.id}" class="id-card-qr-img">
             <span class="id-card-code">${student.id}</span>
         </div>
     `;
     grid.appendChild(card);
-
-    const qrBox = document.getElementById(`fixed-qr-${student.id}`);
-    if (qrBox) {
-        new QRCode(qrBox, {
-            text: getFixedQrUrl(student.id),
-            width: 140,
-            height: 140,
-            colorDark: "#000000",
-            colorLight: "#ffffff",
-            correctLevel: QRCode.CorrectLevel.M
-        });
-    }
 }
 
 function renderStudentIdCards() {
@@ -570,7 +608,7 @@ function renderStudentIdCards() {
 
     grid.innerHTML = "";
     if (students.length === 0) {
-        grid.innerHTML = `<p class="empty-cards-msg" style="color:#64748b;">لا توجد بطاقات حالياً. عند تسجيل أي طالب ستظهر بطاقته الثابتة هنا.</p>`;
+        grid.innerHTML = `<p class="empty-cards-msg" style="color:#64748b;">لا توجد بطاقات حالياً. عند تسجيل أي طالب ستظهر بطاقته بالباركود عالي الدقة هنا.</p>`;
         return;
     }
 
@@ -607,8 +645,8 @@ function updateDayBanner() {
     const holidayReason = checkNonSchoolDayReason();
 
     dayBanner.innerHTML = holidayReason
-        ? `اليوم: <strong>${dayName}</strong> — ⛔ مستثنى من المسح التلقائي (<strong>${holidayReason}</strong>)`
-        : `اليوم: <strong>${dayName}</strong> — ✅ يوم دراسي فعلي (قارئ الباركود نشط)`;
+        ? `اليوم: <strong>${dayName}</strong> — ⛔ مستثنى من التحضير التلقائي (<strong>${holidayReason}</strong>)`
+        : `اليوم: <strong>${dayName}</strong> — ✅ يوم دراسي فعلي (قارئ الباركود نشط وجاهز)`;
 }
 
 function startCameraScanner() {
@@ -619,7 +657,7 @@ function startCameraScanner() {
         html5QrScanner = new Html5Qrcode("reader");
         html5QrScanner.start(
             { facingMode: "environment" },
-            { fps: 10, qrbox: { width: 220, height: 220 } },
+            { fps: 12, qrbox: { width: 220, height: 220 } },
             (decodedText) => {
                 const nowMs = Date.now();
                 if (decodedText !== lastScanCode || nowMs - lastScanTime > 4000) {
@@ -632,11 +670,11 @@ function startCameraScanner() {
         ).then(() => {
             isCameraRunning = true;
             if (btn) {
-                btn.innerText = "✅ قارئ الباركود يعمل";
+                btn.innerText = "✅ الكاميرا تعمل";
                 btn.disabled = true;
             }
         }).catch(() => {
-            alert("تعذر فتح الكاميرا. تأكد من منح المتصفح إذن الوصول للكاميرا أو استخدم الإدخال اليدوي.");
+            alert("تعذر فتح الكاميرا. تأكد من منح الإذن للكاميرا أو استخدم قارئ الباركود الليزري مباشرة.");
         });
     } catch (e) {
         alert("مكتبة الكاميرا غير متاحة على هذا المتصفح.");
@@ -652,34 +690,36 @@ function stopCameraScanner() {
 }
 
 window.addEventListener("DOMContentLoaded", () => {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e;
     const urlParams = new URLSearchParams(window.location.search);
     const scannedStudentId = urlParams.get("id");
 
     if (scannedStudentId) {
-        (_a = document.getElementById("main-navbar")) === null || _a === void 0 ? void 0 : _a.remove();
+        (_a = document.getElementById("portal-landing-page")) === null || _a === void 0 ? void 0 : _a.remove();
         (_b = document.getElementById("student-search-box")) === null || _b === void 0 ? void 0 : _b.remove();
         (_c = document.getElementById("admin-login-page")) === null || _c === void 0 ? void 0 : _c.remove();
         (_d = document.getElementById("admin-dashboard-page")) === null || _d === void 0 ? void 0 : _d.remove();
+        (_e = document.getElementById("header-back-btn-wrap")) === null || _e === void 0 ? void 0 : _e.remove();
         showPage("student-page");
 
         const targetStudent = students.find(s => s.id === scannedStudentId.trim().toUpperCase());
         if (targetStudent) {
             renderStudentCard(targetStudent);
         } else {
-            const card = document.querySelector("#student-page .card");
-            if (card) {
-                card.innerHTML = `<h2>❌ سجل الطالب غير موجود</h2><p class="subtitle">رقم الطالب (${scannedStudentId}) غير مسجل على هذا الجهاز.</p>`;
+            const studentPage = document.getElementById("student-page");
+            if (studentPage) {
+                studentPage.innerHTML = `<div class="panel-card"><h2>❌ سجل الطالب غير موجود</h2><p class="muted-text">الرقم المدرسي (${scannedStudentId}) غير مسجل على هذا الجهاز.</p></div>`;
             }
         }
         return;
     }
 
-    openStudentPage();
+    goToPortalHome();
 });
 
-window.openStudentPage = openStudentPage;
-window.openAdminPage = openAdminPage;
+window.goToPortalHome = goToPortalHome;
+window.openStudentPortal = openStudentPortal;
+window.openAdminPortal = openAdminPortal;
 window.verifyAdminLogin = verifyAdminLogin;
 window.logoutAdmin = logoutAdmin;
 window.handleStudentSearch = handleStudentSearch;
