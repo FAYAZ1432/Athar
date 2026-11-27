@@ -13,13 +13,33 @@ interface Student {
     achievements: Achievement[];
 }
 
+interface HolidayPeriod {
+    name: string;
+    start: string; // YYYY-MM-DD
+    end: string;   // YYYY-MM-DD
+}
+
 declare var QRCode: any;
 declare var Html5QrcodeScanner: any;
 
-const STORAGE_KEY = "smart_school_portal_v8";
+const STORAGE_KEY = "smart_school_portal_v9";
+const CUSTOM_HOLIDAYS_KEY = "smart_school_custom_holidays_v1";
 const ADMIN_PASS = "2443422";
 
+// الإجازات الرسمية والمطولة وإجازة منتصف العام والأعياد والإجازة الصيفية للعام الدراسي 1448هـ (2026-2027م)
+const OFFICIAL_HOLIDAYS_1448: HolidayPeriod[] = [
+    { name: "إجازة نهاية أسبوع مطولة (1)", start: "2026-10-15", end: "2026-10-15" },
+    { name: "إجازة الخريف (منتصف الفصل الأول)", start: "2026-11-20", end: "2026-11-28" },
+    { name: "إجازة نهاية أسبوع مطولة (2)", start: "2026-12-13", end: "2026-12-13" },
+    { name: "إجازة منتصف العام الدراسي", start: "2027-01-01", end: "2027-01-09" },
+    { name: "إجازة يوم التأسيس", start: "2027-02-22", end: "2027-02-22" },
+    { name: "إجازة عيد الفطر المبارك", start: "2027-03-05", end: "2027-03-15" },
+    { name: "إجازة عيد الأضحى المبارك", start: "2027-05-14", end: "2027-05-22" },
+    { name: "الإجازة الصيفية لنهاية العام الدراسي 1448هـ", start: "2027-05-28", end: "2027-08-21" }
+];
+
 let students: Student[] = loadStudents();
+let customHolidays: HolidayPeriod[] = loadCustomHolidays();
 let isAdminAuthenticated = false;
 let scannerInstance: any = null;
 let lastScanTime = 0;
@@ -27,6 +47,19 @@ let lastScanTime = 0;
 function loadStudents(): Student[] {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) return parsed;
+        }
+    } catch (e) {
+        console.error(e);
+    }
+    return [];
+}
+
+function loadCustomHolidays(): HolidayPeriod[] {
+    try {
+        const raw = localStorage.getItem(CUSTOM_HOLIDAYS_KEY);
         if (raw) {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed)) return parsed;
@@ -45,6 +78,42 @@ function saveStudents(): void {
     }
     renderAdminTable();
     populateStudentSelect();
+}
+
+function saveCustomHolidays(): void {
+    try {
+        localStorage.setItem(CUSTOM_HOLIDAYS_KEY, JSON.stringify(customHolidays));
+    } catch (e) {
+        console.error(e);
+    }
+    renderHolidaysList();
+    updateDayBanner();
+}
+
+function getTodayDateISO(): string {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+}
+
+// التحقق مما إذا كان اليوم إجازة (عطلة نهاية أسبوع أو إجازة رسمية أو إجازة صيفية أو إجازة طارئة)
+function checkNonSchoolDayReason(): string | null {
+    const now = new Date();
+    const dayOfWeek = now.getDay(); // 5 = الجمعة، 6 = السبت
+    if (dayOfWeek === 5) return "عطلة نهاية الأسبوع (الجمعة)";
+    if (dayOfWeek === 6) return "عطلة نهاية الأسبوع (السبت)";
+
+    const todayISO = getTodayDateISO();
+    const allHolidays = [...OFFICIAL_HOLIDAYS_1448, ...customHolidays];
+
+    for (const h of allHolidays) {
+        if (todayISO >= h.start && todayISO <= h.end) {
+            return h.name;
+        }
+    }
+    return null; // يوم دراسي فعلي
 }
 
 function encodeStudentData(student: Student): string {
@@ -136,6 +205,7 @@ function verifyAdminLogin(event: Event): void {
         passInput.value = "";
         showPage("admin-dashboard-page");
         saveStudents();
+        renderHolidaysList();
         initAdminScanner();
     } else {
         errorBox.classList.remove("hidden");
@@ -196,11 +266,6 @@ function handleStudentSearch(): void {
     renderStudentCard(student);
 }
 
-function isSchoolDay(): boolean {
-    const day = new Date().getDay();
-    return day >= 0 && day <= 4;
-}
-
 function recordAttendanceByAdmin(rawInput: string): void {
     if (!isAdminAuthenticated) return;
 
@@ -208,11 +273,11 @@ function recordAttendanceByAdmin(rawInput: string): void {
     resultBox.classList.remove("hidden", "success", "error", "warning");
 
     const isDemoMode = (document.getElementById("demo-mode-checkbox") as HTMLInputElement)?.checked;
+    const holidayReason = checkNonSchoolDayReason();
 
-    if (!isSchoolDay() && !isDemoMode) {
-        const dayArabic = new Date().getDay() === 5 ? "الجمعة" : "السبت";
+    if (holidayReason && !isDemoMode) {
         resultBox.classList.add("warning");
-        resultBox.innerHTML = `⛔ اليوم هو <strong>${dayArabic}</strong> (عطلة نهاية الأسبوع).<br>التحضير متاح أيام الدراسة فقط (من الأحد إلى الخميس).`;
+        resultBox.innerHTML = `⛔ التحضير متوقف اليوم بسبب: <strong>${holidayReason}</strong>.<br>يستثني النظام أيام العطل والإجازات الرسمية والصيفية تلقائياً.`;
         return;
     }
 
@@ -295,6 +360,32 @@ function addAchievement(event: Event): void {
     }
 }
 
+function addCustomHoliday(event: Event): void {
+    event.preventDefault();
+    if (!isAdminAuthenticated) return;
+
+    const name = (document.getElementById("custom-holiday-name") as HTMLInputElement).value.trim();
+    const date = (document.getElementById("custom-holiday-date") as HTMLInputElement).value;
+
+    customHolidays.push({ name, start: date, end: date });
+    saveCustomHolidays();
+    (event.target as HTMLFormElement).reset();
+    alert(`تمت إضافة "${name}" (${date}) إلى قائمة الإجازات المستثناة.`);
+}
+
+function renderHolidaysList(): void {
+    const list = document.getElementById("holidays-display-list");
+    if (!list) return;
+
+    const allHolidays = [...OFFICIAL_HOLIDAYS_1448, ...customHolidays];
+    list.innerHTML = allHolidays
+        .map(h => {
+            const rangeText = h.start === h.end ? h.start : `من ${h.start} إلى ${h.end}`;
+            return `<li>📅 <strong>${h.name}</strong> <span style="color:#64748b; font-size:0.85rem;">(${rangeText})</span></li>`;
+        })
+        .join("");
+}
+
 function updateAbsence(studentId: string, change: number): void {
     if (!isAdminAuthenticated) return;
     const student = students.find(s => s.id === studentId);
@@ -361,15 +452,20 @@ function populateStudentSelect(): void {
     select.innerHTML = students.map(s => `<option value="${s.id}">${s.name} (${s.id})</option>`).join("");
 }
 
-function initAdminScanner(): void {
+function updateDayBanner(): void {
     const dayBanner = document.getElementById("current-day-banner");
-    if (dayBanner) {
-        const dayName = new Date().toLocaleDateString("ar-SA", { weekday: "long" });
-        dayBanner.innerHTML = !isSchoolDay()
-            ? `اليوم: <strong>${dayName}</strong> (عطلة نهاية الأسبوع - التحضير متوقف تلقائياً)`
-            : `اليوم: <strong>${dayName}</strong> (يوم دراسي - ماسح التحضير نشط)`;
-    }
+    if (!dayBanner) return;
 
+    const dayName = new Date().toLocaleDateString("ar-SA", { weekday: "long" });
+    const holidayReason = checkNonSchoolDayReason();
+
+    dayBanner.innerHTML = holidayReason
+        ? `اليوم: <strong>${dayName}</strong> — ⛔ مستثنى من التحضير (<strong>${holidayReason}</strong>)`
+        : `اليوم: <strong>${dayName}</strong> — ✅ يوم دراسي فعلي (ماسح التحضير نشط)`;
+}
+
+function initAdminScanner(): void {
+    updateDayBanner();
     if (scannerInstance) return;
     try {
         scannerInstance = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 220 }, false);
@@ -422,6 +518,7 @@ window.addEventListener("DOMContentLoaded", () => {
 (window as any).handleAdminScan = handleAdminScan;
 (window as any).addNewStudent = addNewStudent;
 (window as any).addAchievement = addAchievement;
+(window as any).addCustomHoliday = addCustomHoliday;
 (window as any).updateAbsence = updateAbsence;
 (window as any).clearAllStudents = clearAllStudents;
 (window as any).viewStudentFromAdmin = viewStudentFromAdmin;
