@@ -106,7 +106,7 @@
                 <button class="btn danger-outline" onclick="logoutAdmin()">تسجيل خروج</button>
             </div>
 
-            <!-- قسم ماسح QR لتسجيل الحضور فقط -->
+            <!-- قسم ماسح QR لتسجيل الحضور فقط (مع منع التكرار اليومي) -->
             <div class="card mb-20">
                 <div class="gate-header">
                     <div>
@@ -168,12 +168,28 @@
                 </div>
             </div>
 
-            <!-- جدول الطلاب والتحكم اليدوي الكامل في الحضور والغياب بعذر وبدون عذر -->
+            <!-- قسم تصدير التقارير والنسخ الاحتياطي -->
+            <div class="card mt-20">
+                <div class="table-header-bar" style="margin-bottom:0;">
+                    <div>
+                        <h3>📂 التقارير والنسخ الاحتياطي للبيانات</h3>
+                        <p class="subtitle" style="margin-bottom:0;">تصدير كشف الحضور لبرنامج Excel أو حفظ واستعادة نسخة احتياطية لنقل البيانات بين الأجهزة</p>
+                    </div>
+                    <div style="display:flex; gap:0.6rem; flex-wrap:wrap;">
+                        <button type="button" class="btn success" onclick="exportToExcelCSV()">📊 تصدير كشف Excel (CSV)</button>
+                        <button type="button" class="btn primary" onclick="exportBackupJSON()">💾 حفظ نسخة احتياطية</button>
+                        <button type="button" class="btn outline-primary" onclick="triggerBackupRestore()">📂 استعادة نسخة احتياطية</button>
+                        <input type="file" id="restore-backup-input" accept=".json" class="hidden" onchange="importBackupJSON(event)">
+                    </div>
+                </div>
+            </div>
+
+            <!-- جدول الطلاب والتحكم اليدوي الكامل في الحضور والغياب والحذف -->
             <div class="card mt-20">
                 <div class="table-header-bar">
                     <div>
                         <h3>📋 سجل الطلاب والتحكم المباشر في الحضور والغياب</h3>
-                        <p class="subtitle" style="margin-bottom:0;">استخدم الأزرار أدناه لتسجيل الحضور أو تعديل الغياب بعذر/بدون عذر في حال حدوث خلل مفاجئ</p>
+                        <p class="subtitle" style="margin-bottom:0;">استخدم الأزرار أدناه لتسجيل الحضور أو تعديل الغياب بعذر/بدون عذر أو حذف أي طالب</p>
                     </div>
                     <button class="btn danger-outline" onclick="clearAllStudents()">مسح جميع الطلاب</button>
                 </div>
@@ -187,7 +203,7 @@
                                 <th>الحضور (طوارئ)</th>
                                 <th>غياب بعذر</th>
                                 <th>غياب بدون عذر</th>
-                                <th>ملف الطالب</th>
+                                <th>الإجراءات</th>
                             </tr>
                         </thead>
                         <tbody id="admin-students-tbody"></tbody>
