@@ -21,42 +21,46 @@
     <main class="container">
 
         <!-- ==========================================
-             1. صفحة الطلاب (عرض الملف والإنجازات فقط)
+             1. صفحة الطلاب (عرض الملف والإنجازات عند الاستعلام)
              ========================================== -->
         <section id="student-page" class="page-view active">
             <div class="card">
                 <div id="student-search-box">
                     <h2>🪪 بوابة الاستعلام عن الملف الطلابي</h2>
-                    <p class="subtitle">أدخل رقمك المدرسي أو امسح بطاقة الهوية الذكية بالجوال لعرض سجل الانتظام والإنجازات</p>
+                    <p class="subtitle">أدخل رقمك المدرسي الموجود على بطاقتك لعرض سجل الانتظام والإنجازات</p>
                     <div class="search-profile">
                         <input type="text" id="student-search-input" placeholder="أدخل رقم الطالب (مثال: STU-101)">
                         <button class="btn primary" onclick="handleStudentSearch()">عرض ملفي</button>
                     </div>
                 </div>
 
-                <!-- بطاقة الطالب -->
+                <!-- ملف الطالب الكامل -->
                 <div id="student-profile-view" class="profile-container hidden">
                     <div class="profile-header">
                         <div class="student-info">
-                            <span class="role-tag">بطاقة الهوية المدرسية الرقمية</span>
+                            <span class="role-tag">ملف الطالب الرقمي</span>
                             <h2 id="p-name">اسم الطالب</h2>
                             <p id="p-grade">الصف الدراسي</p>
                             <span id="p-id" class="badge">STU-101</span>
                         </div>
                         <div class="qr-wrapper">
                             <div id="p-qrcode" class="qr-box"></div>
-                            <small>باركود الطالب (يفتح الملف بالجوال، ويسجل الحضور عند المشرف)</small>
+                            <small>باركود التحضير الثابت للطالب</small>
                         </div>
                     </div>
 
-                    <div class="stats-grid">
+                    <div class="stats-grid-4">
                         <div class="stat-box present">
                             <span class="stat-label">أيام الحضور</span>
                             <strong id="p-present" class="stat-num">0</strong>
                         </div>
+                        <div class="stat-box excused">
+                            <span class="stat-label">غياب بعذر</span>
+                            <strong id="p-excused" class="stat-num">0</strong>
+                        </div>
                         <div class="stat-box absent">
-                            <span class="stat-label">أيام الغياب</span>
-                            <strong id="p-absent" class="stat-num">0</strong>
+                            <span class="stat-label">غياب بدون عذر</span>
+                            <strong id="p-unexcused" class="stat-num">0</strong>
                         </div>
                         <div class="stat-box rate">
                             <span class="stat-label">نسبة الانتظام</span>
@@ -70,7 +74,7 @@
                     </div>
 
                     <div class="attendance-log-section">
-                        <h3>🕒 سجل أوقات الحضور (أيام الدراسة الفعلية)</h3>
+                        <h3>🕒 سجل الحضور والغياب</h3>
                         <ul id="p-logs-list" class="logs-list"></ul>
                     </div>
                 </div>
@@ -94,7 +98,7 @@
         </section>
 
         <!-- ==========================================
-             3. صفحة المشرف (التسجيل، الماسح، الإجازات، الإنجازات)
+             3. صفحة المشرف
              ========================================== -->
         <section id="admin-dashboard-page" class="page-view">
             <div class="admin-top-bar">
@@ -102,23 +106,26 @@
                 <button class="btn danger-outline" onclick="logoutAdmin()">تسجيل خروج</button>
             </div>
 
-            <!-- قسم ماسح QR لتسجيل الحضور (يستثني العطل والإجازات الرسمية والصيفية) -->
+            <!-- قسم ماسح QR لتسجيل الحضور فقط -->
             <div class="card mb-20">
                 <div class="gate-header">
                     <div>
-                        <h3>🚪 ماسح QR لتسجيل الحضور</h3>
+                        <h3>🚪 ماسح QR لتسجيل الحضور (مخصص للتحضير فقط)</h3>
                         <p class="subtitle" id="current-day-banner">جاري التحقق من التقويم الدراسي...</p>
                     </div>
-                    <label class="demo-toggle">
-                        <input type="checkbox" id="demo-mode-checkbox">
-                        <span>وضع التجربة (تجاوز الإجازات وعطلة الأسبوع)</span>
-                    </label>
+                    <div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center;">
+                        <button class="btn success" id="start-camera-btn" onclick="startCameraScanner()">📷 تشغيل كاميرا الماسح</button>
+                        <label class="demo-toggle">
+                            <input type="checkbox" id="demo-mode-checkbox">
+                            <span>وضع التجربة (تجاوز الإجازات)</span>
+                        </label>
+                    </div>
                 </div>
 
                 <div id="reader" class="qr-scanner-box"></div>
 
                 <div class="manual-scan">
-                    <input type="text" id="manual-id-input" placeholder="امسح الباركود بالكاميرا أو أدخل رقم الطالب يدوياً">
+                    <input type="text" id="manual-id-input" placeholder="امسح بطاقة الطالب بالكاميرا أو أدخل رقمه يدوياً هنا">
                     <button class="btn primary" onclick="handleAdminScan()">تسجيل حضور</button>
                 </div>
                 <div id="scan-result" class="alert hidden"></div>
@@ -128,7 +135,7 @@
             <div class="admin-grid">
                 <!-- تسجيل طالب جديد عن طريق المشرف -->
                 <div class="card">
-                    <h3>➕ تسجيل طالب جديد وإصدار باركود</h3>
+                    <h3>➕ تسجيل طالب جديد وإصدار باركود ثابت</h3>
                     <form onsubmit="addNewStudent(event)">
                         <label>رقم الطالب (ID)</label>
                         <input type="text" id="new-id" required placeholder="مثال: STU-101">
@@ -139,7 +146,7 @@
                         <label>الصف الدراسي</label>
                         <input type="text" id="new-grade" required placeholder="مثال: الثالث ثانوي">
                         
-                        <button type="submit" class="btn primary full-width">تسجيل الطالب وتوليد الباركود</button>
+                        <button type="submit" class="btn primary full-width">تسجيل الطالب وتوليد الباركود الثابت</button>
                     </form>
                 </div>
 
@@ -161,23 +168,13 @@
                 </div>
             </div>
 
-            <!-- قسم الإجازات المستثناة تلقائياً + إضافة إجازة طارئة -->
-            <div class="card mt-20">
-                <h3>📅 التقويم الدراسي والإجازات المستثناة تلقائياً من التحضير (1448هـ)</h3>
-                <p class="subtitle">النظام يوقف التحضير تلقائياً في عطلة نهاية الأسبوع (الجمعة والسبت) وفي الإجازات التالية:</p>
-                <ul id="holidays-display-list" class="logs-list"></ul>
-
-                <form onsubmit="addCustomHoliday(event)" class="manual-scan" style="margin-top: 1rem;">
-                    <input type="text" id="custom-holiday-name" required placeholder="إضافة إجازة طارئة / تعليق دراسة (مثال: تعليق أمطار)">
-                    <input type="date" id="custom-holiday-date" required style="max-width: 180px;">
-                    <button type="submit" class="btn primary">استثناء التاريخ</button>
-                </form>
-            </div>
-
-            <!-- جدول الطلاب وتعديل الغياب -->
+            <!-- جدول الطلاب والتحكم اليدوي الكامل في الحضور والغياب بعذر وبدون عذر -->
             <div class="card mt-20">
                 <div class="table-header-bar">
-                    <h3>📋 قائمة الطلاب المسجلين وتعديل الغياب</h3>
+                    <div>
+                        <h3>📋 سجل الطلاب والتحكم المباشر في الحضور والغياب</h3>
+                        <p class="subtitle" style="margin-bottom:0;">استخدم الأزرار أدناه لتسجيل الحضور أو تعديل الغياب بعذر/بدون عذر في حال حدوث خلل مفاجئ</p>
+                    </div>
                     <button class="btn danger-outline" onclick="clearAllStudents()">مسح جميع الطلاب</button>
                 </div>
                 <div class="table-responsive">
@@ -187,14 +184,34 @@
                                 <th>الرقم</th>
                                 <th>اسم الطالب</th>
                                 <th>الصف</th>
-                                <th>الحضور</th>
-                                <th>تعديل الغياب</th>
-                                <th>بطاقة الطالب والباركود</th>
+                                <th>الحضور (طوارئ)</th>
+                                <th>غياب بعذر</th>
+                                <th>غياب بدون عذر</th>
+                                <th>ملف الطالب</th>
                             </tr>
                         </thead>
                         <tbody id="admin-students-tbody"></tbody>
                     </table>
                 </div>
+            </div>
+
+            <!-- بطاقات الهوية المدرسية لكل طالب (بدون إنجازات وبباركود ثابت) -->
+            <div class="card mt-20" id="id-cards-section">
+                <div class="table-header-bar">
+                    <div>
+                        <h3>🪪 بطاقات الهوية المدرسية للطلاب (باركود ثابت - بدون إنجازات)</h3>
+                        <p class="subtitle" style="margin-bottom:0;">الباركود ثابت لا يتغير؛ امسحه عبر كاميرا الماسح أعلاه لتسجيل الحضور مباشرة</p>
+                    </div>
+                    <button class="btn primary" onclick="window.print()">🖨️ طباعة البطاقات</button>
+                </div>
+                <div id="student-id-cards-grid" class="id-cards-grid"></div>
+            </div>
+
+            <!-- عرض الإجازات القادمة والصيفية المستثناة فقط -->
+            <div class="card mt-20">
+                <h3>📅 الإجازات القادمة والإجازة الصيفية المستثناة تلقائياً من التحضير</h3>
+                <p class="subtitle">يتم إيقاف المسح التلقائي في عطلة نهاية الأسبوع (الجمعة والسبت) وفي الفترات التالية فقط:</p>
+                <ul id="holidays-display-list" class="logs-list"></ul>
             </div>
         </section>
 
