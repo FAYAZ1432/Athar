@@ -6,7 +6,8 @@ interface Achievement {
 interface Student {
     id: string;
     name: string;
-    grade: string;
+    grade: string;      // الأول ثانوي / الثاني ثانوي / الثالث ثانوي
+    classroom: string;  // 1 / 2 / 3
     presentDays: number;
     excusedAbsentDays: number;
     unexcusedAbsentDays: number;
@@ -24,7 +25,7 @@ interface HolidayPeriod {
 declare var QRCode: any;
 declare var Html5Qrcode: any;
 
-const STORAGE_KEY = "smart_school_portal_v12";
+const STORAGE_KEY = "athar_school_portal_v1";
 const ADMIN_PASS = "2443422";
 
 const UPCOMING_AND_SUMMER_HOLIDAYS: HolidayPeriod[] = [
@@ -89,10 +90,16 @@ function checkNonSchoolDayReason(): string | null {
     return null;
 }
 
-function getFixedQrValue(studentId: string): string {
-    return studentId.trim().toUpperCase();
+// رابط QR الثابت للطالب:
+// 1. عند مسحه بالجوال يفتح سجلات الطالب فقط (?id=STU-101)
+// 2. عند مسحه بقارئ المدرسة يستخرج رقم الطالب ويسجل حضوره
+// 3. ثابت لا يتغير أبداً
+function getFixedQrUrl(studentId: string): string {
+    const baseUrl = window.location.href.split("?")[0];
+    return `${baseUrl}?id=${encodeURIComponent(studentId.trim().toUpperCase())}`;
 }
 
+// استخراج رقم الطالب سواء من الرابط الكامل أو من الرقم المباشر
 function extractStudentId(input: string): string {
     const clean = input.trim();
     if (clean.includes("id=")) {
@@ -156,12 +163,13 @@ function logoutAdmin(): void {
     openStudentPage();
 }
 
+// عرض سجلات الطالب (سواء عبر البحث أو عبر مسح الباركود بالجوال)
 function renderStudentCard(student: Student): void {
     const profileView = document.getElementById("student-profile-view")!;
     profileView.classList.remove("hidden");
 
     document.getElementById("p-name")!.innerText = student.name;
-    document.getElementById("p-grade")!.innerText = student.grade;
+    document.getElementById("p-grade-class")!.innerText = `${student.grade} — فصل ${student.classroom || "1"}`;
     document.getElementById("p-id")!.innerText = student.id;
     document.getElementById("p-present")!.innerText = student.presentDays.toString();
     document.getElementById("p-excused")!.innerText = student.excusedAbsentDays.toString();
@@ -174,12 +182,12 @@ function renderStudentCard(student: Student): void {
     const qrContainer = document.getElementById("p-qrcode")!;
     qrContainer.innerHTML = "";
     new QRCode(qrContainer, {
-        text: getFixedQrValue(student.id),
+        text: getFixedQrUrl(student.id),
         width: 155,
         height: 155,
         colorDark: "#000000",
         colorLight: "#ffffff",
-        correctLevel: QRCode.CorrectLevel.H
+        correctLevel: QRCode.CorrectLevel.M
     });
 
     const achList = document.getElementById("p-achievements-list")!;
@@ -199,7 +207,7 @@ function handleStudentSearch(): void {
     const student = students.find(s => s.id === targetId);
 
     if (!student) {
-        alert("رقم الطالب غير مسجل! يجب تسجيل الطالب أولاً من بوابة المشرف.");
+        alert("رقم الطالب غير مسجل في منصة أثر! يجب تسجيل الطالب أولاً من بوابة المشرف.");
         document.getElementById("student-profile-view")!.classList.add("hidden");
         return;
     }
@@ -212,6 +220,7 @@ function getFormattedNow(): string {
     return `${dayName} (${now.toLocaleDateString("ar-SA")}) - ${now.toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}`;
 }
 
+// قارئ الباركود المدرسي يسجل حضور الطالب عند مسح الكود (مع منع التكرار في نفس اليوم)
 function recordAttendanceByScanner(rawInput: string): void {
     if (!isAdminAuthenticated) return;
 
@@ -223,7 +232,7 @@ function recordAttendanceByScanner(rawInput: string): void {
 
     if (holidayReason && !isDemoMode) {
         resultBox.classList.add("warning");
-        resultBox.innerHTML = `⛔ التحضير متوقف اليوم بسبب: <strong>${holidayReason}</strong>.<br>يستثني النظام أيام العطل والإجازات القادمة والصيفية تلقائياً.`;
+        resultBox.innerHTML = `⛔ التحضير متوقف اليوم بسبب: <strong>${holidayReason}</strong>.<br>يستثني نظام أثر أيام العطل والإجازات القادمة والصيفية تلقائياً.`;
         return;
     }
 
@@ -232,7 +241,7 @@ function recordAttendanceByScanner(rawInput: string): void {
 
     if (!student) {
         resultBox.classList.add("error");
-        resultBox.innerText = `❌ هذا الباركود غير مسجل في النظام: ${studentId}`;
+        resultBox.innerText = `❌ هذا الباركود غير مسجل في منصة أثر: ${studentId}`;
         return;
     }
 
@@ -246,11 +255,11 @@ function recordAttendanceByScanner(rawInput: string): void {
     const timeString = getFormattedNow();
     student.presentDays += 1;
     student.lastAttendedDate = todayISO;
-    student.attendanceLogs.unshift(`✅ حضور (ماسح QR): ${timeString}`);
+    student.attendanceLogs.unshift(`✅ حضور (قارئ الباركود المدرسي): ${timeString}`);
     saveStudents();
 
     resultBox.classList.add("success");
-    resultBox.innerHTML = `✅ تم تسجيل حضور الطالب: <strong>${student.name}</strong> (${student.grade})<br>الوقت: ${timeString}`;
+    resultBox.innerHTML = `✅ تم تسجيل حضور الطالب: <strong>${student.name}</strong> (${student.grade} - فصل ${student.classroom})<br>الوقت: ${timeString}`;
 }
 
 function handleAdminScan(): void {
@@ -267,7 +276,13 @@ function addNewStudent(event: Event): void {
 
     const id = (document.getElementById("new-id") as HTMLInputElement).value.trim().toUpperCase();
     const name = (document.getElementById("new-name") as HTMLInputElement).value.trim();
-    const grade = (document.getElementById("new-grade") as HTMLInputElement).value.trim();
+    const grade = (document.getElementById("new-grade") as HTMLSelectElement).value;
+    const classroom = (document.getElementById("new-classroom") as HTMLSelectElement).value;
+
+    if (!grade || !classroom) {
+        alert("يرجى اختيار الصف الدراسي والفصل!");
+        return;
+    }
 
     if (students.some(s => s.id === id)) {
         alert("رقم الطالب مسجل مسبقاً!");
@@ -278,6 +293,7 @@ function addNewStudent(event: Event): void {
         id,
         name,
         grade,
+        classroom,
         presentDays: 0,
         excusedAbsentDays: 0,
         unexcusedAbsentDays: 0,
@@ -290,7 +306,7 @@ function addNewStudent(event: Event): void {
     saveStudents();
     appendSingleIdCard(newStudent);
     (event.target as HTMLFormElement).reset();
-    alert(`تم تسجيل الطالب ${name} وإصدار بطاقته ذات الباركود الثابت بنجاح!`);
+    alert(`تم تسجيل الطالب ${name} (${grade} - فصل ${classroom}) وإصدار باركود أثر الثابت بنجاح!`);
 }
 
 function addAchievement(event: Event): void {
@@ -311,7 +327,7 @@ function addAchievement(event: Event): void {
         student.achievements.unshift({ title, date });
         saveStudents();
         (event.target as HTMLFormElement).reset();
-        alert("تمت إضافة الإنجاز إلى ملف الطالب بنجاح (وبقي الباركود ثابتاً)!");
+        alert("تمت إضافة الإنجاز إلى سجل الطالب بنجاح!");
     }
 }
 
@@ -367,6 +383,7 @@ function exportToExcelCSV(): void {
         "رقم الطالب",
         "اسم الطالب",
         "الصف الدراسي",
+        "الفصل",
         "أيام الحضور",
         "غياب بعذر",
         "غياب بدون عذر",
@@ -381,6 +398,7 @@ function exportToExcelCSV(): void {
             `"${s.id}"`,
             `"${s.name.replace(/"/g, '""')}"`,
             `"${s.grade.replace(/"/g, '""')}"`,
+            `"${s.classroom || "1"}"`,
             s.presentDays,
             s.excusedAbsentDays,
             s.unexcusedAbsentDays,
@@ -395,7 +413,7 @@ function exportToExcelCSV(): void {
 
     const link = document.createElement("a");
     link.href = url;
-    link.download = `تقرير_الحضور_والانتظام_${getTodayDateISO()}.csv`;
+    link.download = `أثر_تقرير_الحضور_والانتظام_${getTodayDateISO()}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -405,6 +423,7 @@ function exportToExcelCSV(): void {
 function exportBackupJSON(): void {
     if (!isAdminAuthenticated) return;
     const backupData = {
+        platform: "أثر",
         version: "1.0",
         exportedAt: new Date().toISOString(),
         students: students
@@ -415,7 +434,7 @@ function exportBackupJSON(): void {
 
     const link = document.createElement("a");
     link.href = url;
-    link.download = `نسخة_احتياطية_الهوية_المدرسية_${getTodayDateISO()}.json`;
+    link.download = `أثر_نسخة_احتياطية_${getTodayDateISO()}.json`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -455,7 +474,8 @@ function importBackupJSON(event: Event): void {
             students = restoredList.map((s: any) => ({
                 id: String(s.id || "").toUpperCase(),
                 name: String(s.name || ""),
-                grade: String(s.grade || ""),
+                grade: String(s.grade || "الأول ثانوي"),
+                classroom: String(s.classroom || "1"),
                 presentDays: Number(s.presentDays) || 0,
                 excusedAbsentDays: Number(s.excusedAbsentDays) || 0,
                 unexcusedAbsentDays: Number(s.unexcusedAbsentDays) || 0,
@@ -497,7 +517,7 @@ function renderAdminTable(): void {
     if (!tbody) return;
 
     if (students.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:#64748b; padding:1.5rem;">لا يوجد طلاب مسجلون حالياً. قم بتسجيل الطلاب من النموذج أعلاه.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:#64748b; padding:1.5rem;">لا يوجد طلاب مسجلون حالياً. قم بتسجيل الطلاب من النموذج أعلاه.</td></tr>`;
         return;
     }
 
@@ -506,6 +526,7 @@ function renderAdminTable(): void {
             <td><strong>${s.id}</strong></td>
             <td>${s.name}</td>
             <td>${s.grade}</td>
+            <td>فصل ${s.classroom || "1"}</td>
             <td>
                 <div class="absent-controls">
                     <button type="button" class="btn-mini present" title="إضافة حضور يدوي" onclick="adjustAttendanceMetric('${s.id}', 'presentDays', 1)">+</button>
@@ -530,7 +551,7 @@ function renderAdminTable(): void {
             <td>
                 <div style="display:flex; gap:0.4rem; align-items:center;">
                     <button type="button" class="btn primary" style="padding: 0.35rem 0.7rem; font-size:0.85rem;" 
-                    onclick="viewStudentFromAdmin('${s.id}')">الملف</button>
+                    onclick="viewStudentFromAdmin('${s.id}')">السجلات</button>
                     <button type="button" class="btn danger-outline" style="padding: 0.35rem 0.7rem; font-size:0.85rem;" 
                     onclick="deleteStudent('${s.id}')">🗑️ حذف</button>
                 </div>
@@ -549,10 +570,10 @@ function appendSingleIdCard(student: Student): void {
     const card = document.createElement("div");
     card.className = "student-id-card";
     card.innerHTML = `
-        <div class="id-card-top">🪪 بطاقة الهوية المدرسية</div>
+        <div class="id-card-top">✨ أثر | الهوية المدرسية</div>
         <div class="id-card-body">
             <h4>${student.name}</h4>
-            <p>${student.grade}</p>
+            <p>${student.grade} — فصل ${student.classroom || "1"}</p>
             <div id="fixed-qr-${student.id}" class="id-card-qr"></div>
             <span class="id-card-code">${student.id}</span>
         </div>
@@ -562,12 +583,12 @@ function appendSingleIdCard(student: Student): void {
     const qrBox = document.getElementById(`fixed-qr-${student.id}`);
     if (qrBox) {
         new QRCode(qrBox, {
-            text: getFixedQrValue(student.id),
+            text: getFixedQrUrl(student.id),
             width: 140,
             height: 140,
             colorDark: "#000000",
             colorLight: "#ffffff",
-            correctLevel: QRCode.CorrectLevel.H
+            correctLevel: QRCode.CorrectLevel.M
         });
     }
 }
@@ -592,7 +613,7 @@ function populateStudentSelect(): void {
         select.innerHTML = `<option value="">-- سجل طالباً أولاً --</option>`;
         return;
     }
-    select.innerHTML = students.map(s => `<option value="${s.id}">${s.name} (${s.id})</option>`).join("");
+    select.innerHTML = students.map(s => `<option value="${s.id}">${s.name} (${s.grade} - فصل ${s.classroom || "1"})</option>`).join("");
 }
 
 function renderHolidaysList(): void {
@@ -616,7 +637,7 @@ function updateDayBanner(): void {
 
     dayBanner.innerHTML = holidayReason
         ? `اليوم: <strong>${dayName}</strong> — ⛔ مستثنى من المسح التلقائي (<strong>${holidayReason}</strong>)`
-        : `اليوم: <strong>${dayName}</strong> — ✅ يوم دراسي فعلي (ماسح الحضور نشط)`;
+        : `اليوم: <strong>${dayName}</strong> — ✅ يوم دراسي فعلي (قارئ الباركود نشط)`;
 }
 
 function startCameraScanner(): void {
@@ -640,7 +661,7 @@ function startCameraScanner(): void {
         ).then(() => {
             isCameraRunning = true;
             if (btn) {
-                btn.innerText = "✅ كاميرا الماسح تعمل";
+                btn.innerText = "✅ قارئ الباركود يعمل";
                 btn.disabled = true;
             }
         }).catch(() => {
@@ -659,7 +680,30 @@ function stopCameraScanner(): void {
     }
 }
 
+// عند فتح الرابط من مسح QR بالجوال (?id=STU-101) يفتح سجلات الطالب فقط (دون تسجيل حضور)
 window.addEventListener("DOMContentLoaded", () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const scannedStudentId = urlParams.get("id");
+
+    if (scannedStudentId) {
+        document.getElementById("main-navbar")?.remove();
+        document.getElementById("student-search-box")?.remove();
+        document.getElementById("admin-login-page")?.remove();
+        document.getElementById("admin-dashboard-page")?.remove();
+        showPage("student-page");
+
+        const targetStudent = students.find(s => s.id === scannedStudentId.trim().toUpperCase());
+        if (targetStudent) {
+            renderStudentCard(targetStudent);
+        } else {
+            const card = document.querySelector("#student-page .card");
+            if (card) {
+                card.innerHTML = `<h2>❌ سجل الطالب غير موجود</h2><p class="subtitle">رقم الطالب (${scannedStudentId}) غير مسجل على هذا الجهاز.</p>`;
+            }
+        }
+        return;
+    }
+
     openStudentPage();
 });
 
