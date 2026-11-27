@@ -16,31 +16,19 @@ interface Student {
 declare var QRCode: any;
 declare var Html5QrcodeScanner: any;
 
-const STORAGE_KEY = "smart_school_id_v4";
+const STORAGE_KEY = "smart_school_id_v5";
 
 const defaultStudents: Student[] = [
     {
         id: "STU-101",
-        name: "فايز الحربي",
-        grade: "الثالث ثانوي - الموهوبون",
-        presentDays: 45,
+        name: "محمد أحمد العتيبي",
+        grade: "الثالث ثانوي",
+        presentDays: 42,
         absentDays: 1,
         attendanceLogs: ["الأحد - 06:55 ص", "الإثنين - 06:50 ص"],
         achievements: [
-            { title: "ابتكار نظام الهوية المدرسية الذكية", date: "2026-11-20" },
-            { title: "شهادة تميز في البرمجة والتقنية", date: "2026-10-15" }
-        ]
-    },
-    {
-        id: "STU-102",
-        name: "علي المتحمي",
-        grade: "الثالث ثانوي - الموهوبون",
-        presentDays: 46,
-        absentDays: 0,
-        attendanceLogs: ["الأحد - 06:52 ص", "الإثنين - 06:48 ص"],
-        achievements: [
-            { title: "تصميم وتطوير نظام الهوية المدرسية الذكية", date: "2026-11-20" },
-            { title: "المركز الأول في مسابقة الابتكار التقني", date: "2026-09-28" }
+            { title: "المركز الأول في مسابقة الروبوت والذكاء الاصطناعي", date: "2026-11-15" },
+            { title: "شهادة الطالب المثالي في الانضباط المدرسي", date: "2026-10-10" }
         ]
     }
 ];
@@ -50,7 +38,7 @@ function loadStudentsFromStorage(): Student[] {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (raw) {
             const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+            if (Array.isArray(parsed)) return parsed;
         }
     } catch (e) {
         console.error("Storage read error:", e);
@@ -71,7 +59,6 @@ function saveData(): void {
     populateStudentSelect();
 }
 
-// تشفير مضغوط وخفيف للبيانات داخل رابط QR لسهولة القراءة السريعة بالكاميرا
 function encodeStudentCompact(student: Student): string {
     const arr = [
         student.id,
@@ -128,7 +115,6 @@ function extractStudentId(scannedData: string): string {
     return clean.toUpperCase();
 }
 
-// التحقق الصارم: هل اليوم من الأحد (0) إلى الخميس (4)؟
 function isSchoolDay(): boolean {
     const dayOfWeek = new Date().getDay();
     return dayOfWeek >= 0 && dayOfWeek <= 4;
@@ -147,10 +133,8 @@ function switchTab(tabName: string): void {
     if (tabName === "admin") buttons[2]?.classList.add("active");
 }
 
-// تسجيل الحضور عند ماسح البوابة فقط
 function recordAttendance(rawInput: string): void {
     const urlParams = new URLSearchParams(window.location.search);
-    // منع التحضير نهائياً إذا كان الرابط مفتوحاً لعرض ملف الطالب بالجوال
     if (urlParams.has("id") || urlParams.has("d")) return;
 
     const resultBox = document.getElementById("scan-result")!;
@@ -228,169 +212,4 @@ function renderStudentCard(student: Student): void {
     const logsList = document.getElementById("p-logs-list")!;
     logsList.innerHTML = student.attendanceLogs.length
         ? student.attendanceLogs.slice(0, 7).map(log => `<li>✅ حضور: ${log}</li>`).join("")
-        : "<li>لا يوجد سجل حضور بعد.</li>";
-}
-
-function handleProfileSearch(): void {
-    const input = document.getElementById("profile-search-input") as HTMLInputElement;
-    loadStudentProfileById(input.value);
-}
-
-function loadStudentProfileById(rawId: string): void {
-    const targetId = extractStudentId(rawId);
-    const student = students.find(s => s.id === targetId);
-    if (!student) {
-        alert("رقم الطالب غير موجود في السجل!");
-        document.getElementById("student-profile-view")!.classList.add("hidden");
-        return;
-    }
-    renderStudentCard(student);
-}
-
-function updateAbsence(studentId: string, change: number): void {
-    const student = students.find(s => s.id === studentId);
-    if (student) {
-        student.absentDays = Math.max(0, student.absentDays + change);
-        saveData();
-    }
-}
-
-function addNewStudent(event: Event): void {
-    event.preventDefault();
-    const id = (document.getElementById("new-id") as HTMLInputElement).value.trim().toUpperCase();
-    const name = (document.getElementById("new-name") as HTMLInputElement).value.trim();
-    const grade = (document.getElementById("new-grade") as HTMLInputElement).value.trim();
-
-    if (students.some(s => s.id === id)) {
-        alert("رقم الطالب مسجل مسبقاً!");
-        return;
-    }
-
-    students.push({
-        id,
-        name,
-        grade,
-        presentDays: 0,
-        absentDays: 0,
-        attendanceLogs: [],
-        achievements: []
-    });
-
-    saveData();
-    (event.target as HTMLFormElement).reset();
-    alert(`تم حفظ الطالب ${name} وإنشاء الباركود الخاص به!`);
-}
-
-function addAchievement(event: Event): void {
-    event.preventDefault();
-    const studentId = (document.getElementById("select-student") as HTMLSelectElement).value;
-    const title = (document.getElementById("ach-title") as HTMLInputElement).value.trim();
-    const date = (document.getElementById("ach-date") as HTMLInputElement).value;
-
-    const student = students.find(s => s.id === studentId);
-    if (student) {
-        student.achievements.unshift({ title, date });
-        saveData();
-        (event.target as HTMLFormElement).reset();
-        alert("تمت إضافة الإنجاز وحفظه في ملف الطالب!");
-    }
-}
-
-function resetSystemData(): void {
-    if (confirm("هل تريد استعادة البيانات الافتراضية للنظام؟")) {
-        localStorage.removeItem(STORAGE_KEY);
-        students = loadStudentsFromStorage();
-        saveData();
-    }
-}
-
-function renderAdminTable(): void {
-    const tbody = document.getElementById("admin-students-tbody");
-    if (!tbody) return;
-    tbody.innerHTML = students.map(s => `
-        <tr>
-            <td><strong>${s.id}</strong></td>
-            <td>${s.name}</td>
-            <td>${s.grade}</td>
-            <td>${s.presentDays} يوم</td>
-            <td>
-                <div class="absent-controls">
-                    <button class="btn-mini plus" title="إضافة يوم غياب" onclick="updateAbsence('${s.id}', 1)">+</button>
-                    <strong>${s.absentDays}</strong>
-                    <button class="btn-mini minus" title="إنقاص يوم غياب" onclick="updateAbsence('${s.id}', -1)">-</button>
-                </div>
-            </td>
-            <td>
-                <button class="btn primary" style="padding: 0.35rem 0.75rem; font-size:0.85rem;" 
-                onclick="switchTab('profile'); loadStudentProfileById('${s.id}')">عرض الباركود والملف</button>
-            </td>
-        </tr>
-    `).join("");
-}
-
-function populateStudentSelect(): void {
-    const select = document.getElementById("select-student");
-    if (!select) return;
-    select.innerHTML = students.map(s => `<option value="${s.id}">${s.name} (${s.id})</option>`).join("");
-}
-
-window.addEventListener("DOMContentLoaded", () => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const studentId = urlParams.get("id");
-    const compactData = urlParams.get("d");
-
-    // إذا فُتح الرابط عبر مسح الباركود بالجوال -> اعرض الملف فقط وامنع التحضير والكاميرا نهائياً
-    if (studentId || compactData) {
-        document.getElementById("main-navbar")?.remove();
-        document.getElementById("profile-search-bar")?.remove();
-        document.getElementById("gate-section")?.remove();
-        document.getElementById("admin-section")?.remove();
-        switchTab("profile");
-
-        let targetStudent = studentId ? students.find(s => s.id === studentId.toUpperCase()) : undefined;
-        if (!targetStudent && compactData) {
-            const decoded = decodeStudentCompact(compactData);
-            if (decoded) targetStudent = decoded;
-        }
-
-        if (targetStudent) {
-            renderStudentCard(targetStudent);
-        } else {
-            alert("تعذر قراءة بيانات الطالب.");
-        }
-        return;
-    }
-
-    // وضع البوابة والإدارة
-    saveData();
-
-    const dayBanner = document.getElementById("current-day-banner");
-    if (dayBanner) {
-        const dayName = new Date().toLocaleDateString("ar-SA", { weekday: "long" });
-        dayBanner.innerHTML = !isSchoolDay()
-            ? `اليوم: <strong>${dayName}</strong> (عطلة رسمية - التحضير متوقف تلقائياً)`
-            : `اليوم: <strong>${dayName}</strong> (يوم دراسي - ماسح البوابة نشط)`;
-    }
-
-    try {
-        const html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 220 }, false);
-        html5QrcodeScanner.render((decodedText: string) => {
-            const nowMs = Date.now();
-            if (nowMs - lastScanTime > 3000) {
-                lastScanTime = nowMs;
-                recordAttendance(decodedText);
-            }
-        });
-    } catch (e) {
-        console.log("الكاميرا غير متاحة.");
-    }
-});
-
-(window as any).switchTab = switchTab;
-(window as any).handleManualScan = handleManualScan;
-(window as any).handleProfileSearch = handleProfileSearch;
-(window as any).loadStudentProfileById = loadStudentProfileById;
-(window as any).addNewStudent = addNewStudent;
-(window as any).addAchievement = addAchievement;
-(window as any).updateAbsence = updateAbsence;
-(window as any).resetSystemData = resetSystemData;
+        : "<li>لا يوجد سجل
