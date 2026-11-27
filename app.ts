@@ -10,6 +10,7 @@ interface Student {
     presentDays: number;
     excusedAbsentDays: number;
     unexcusedAbsentDays: number;
+    lastAttendedDate?: string;
     attendanceLogs: string[];
     achievements: Achievement[];
 }
@@ -23,7 +24,7 @@ interface HolidayPeriod {
 declare var QRCode: any;
 declare var Html5Qrcode: any;
 
-const STORAGE_KEY = "smart_school_portal_v11";
+const STORAGE_KEY = "smart_school_portal_v12";
 const ADMIN_PASS = "2443422";
 
 const UPCOMING_AND_SUMMER_HOLIDAYS: HolidayPeriod[] = [
@@ -88,7 +89,6 @@ function checkNonSchoolDayReason(): string | null {
     return null;
 }
 
-// قيمة QR الثابتة للطالب: رقم الطالب الصافي فقط لكي لا يتغير أبداً
 function getFixedQrValue(studentId: string): string {
     return studentId.trim().toUpperCase();
 }
@@ -156,7 +156,6 @@ function logoutAdmin(): void {
     openStudentPage();
 }
 
-// عرض ملف الطالب الكامل في بوابة الطلاب (مع باركود ثابت لا يتغير)
 function renderStudentCard(student: Student): void {
     const profileView = document.getElementById("student-profile-view")!;
     profileView.classList.remove("hidden");
@@ -213,7 +212,6 @@ function getFormattedNow(): string {
     return `${dayName} (${now.toLocaleDateString("ar-SA")}) - ${now.toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}`;
 }
 
-// تسجيل الحضور عن طريق الماسح فقط
 function recordAttendanceByScanner(rawInput: string): void {
     if (!isAdminAuthenticated) return;
 
@@ -238,8 +236,16 @@ function recordAttendanceByScanner(rawInput: string): void {
         return;
     }
 
+    const todayISO = getTodayDateISO();
+    if (student.lastAttendedDate === todayISO) {
+        resultBox.classList.add("warning");
+        resultBox.innerHTML = `⚠️ الطالب <strong>${student.name}</strong> (${student.id}) مسجّل حضوره مسبقاً لهذا اليوم (${todayISO}).<br>تم منع التكرار تلقائياً.`;
+        return;
+    }
+
     const timeString = getFormattedNow();
     student.presentDays += 1;
+    student.lastAttendedDate = todayISO;
     student.attendanceLogs.unshift(`✅ حضور (ماسح QR): ${timeString}`);
     saveStudents();
 
@@ -255,7 +261,6 @@ function handleAdminScan(): void {
     }
 }
 
-// تسجيل طالب جديد + توليد بطاقته ذات الباركود الثابت (دون إعادة توليد بطاقات الطلاب السابقين)
 function addNewStudent(event: Event): void {
     event.preventDefault();
     if (!isAdminAuthenticated) return;
@@ -276,6 +281,7 @@ function addNewStudent(event: Event): void {
         presentDays: 0,
         excusedAbsentDays: 0,
         unexcusedAbsentDays: 0,
+        lastAttendedDate: "",
         attendanceLogs: [],
         achievements: []
     };
@@ -287,7 +293,6 @@ function addNewStudent(event: Event): void {
     alert(`تم تسجيل الطالب ${name} وإصدار بطاقته ذات الباركود الثابت بنجاح!`);
 }
 
-// إضافة إنجاز لطالب (لا يؤثر على الباركود الثابت نهائياً)
 function addAchievement(event: Event): void {
     event.preventDefault();
     if (!isAdminAuthenticated) return;
@@ -310,7 +315,6 @@ function addAchievement(event: Event): void {
     }
 }
 
-// أزرار الطوارئ لتعديل الحضور، والغياب بعذر، والغياب بدون عذر (لا تغير الباركود)
 function adjustAttendanceMetric(studentId: string, field: "presentDays" | "excusedAbsentDays" | "unexcusedAbsentDays", change: number): void {
     if (!isAdminAuthenticated) return;
     const student = students.find(s => s.id === studentId);
@@ -331,14 +335,148 @@ function adjustAttendanceMetric(studentId: string, field: "presentDays" | "excus
         } else if (field === "unexcusedAbsentDays") {
             student.attendanceLogs.unshift(`🔴 غياب بدون عذر: ${timeString}`);
         }
+    } else if (field === "presentDays" && nextVal === 0) {
+        student.lastAttendedDate = "";
     }
 
     saveStudents();
 }
 
+function deleteStudent(studentId: string): void {
+    if (!isAdminAuthenticated) return;
+    const student = students.find(s => s.id === studentId);
+    if (!student) return;
+
+    if (!confirm(`⚠️ تأكيد الحذف:\nهل أنت متأكد من حذف الطالب "${student.name}" (${student.id}) وجميع سجلاته نهائياً؟`)) {
+        return;
+    }
+
+    students = students.filter(s => s.id !== studentId);
+    saveStudents();
+    renderStudentIdCards();
+}
+
+function exportToExcelCSV(): void {
+    if (!isAdminAuthenticated) return;
+    if (students.length === 0) {
+        alert("لا يوجد طلاب مسجلون لتصديرهم!");
+        return;
+    }
+
+    const headers = [
+        "رقم الطالب",
+        "اسم الطالب",
+        "الصف الدراسي",
+        "أيام الحضور",
+        "غياب بعذر",
+        "غياب بدون عذر",
+        "نسبة الانتظام",
+        "عدد الإنجازات"
+    ];
+
+    const rows = students.map(s => {
+        const total = s.presentDays + s.excusedAbsentDays + s.unexcusedAbsentDays;
+        const rate = total > 0 ? Math.round((s.presentDays / total) * 100) : 100;
+        return [
+            `"${s.id}"`,
+            `"${s.name.replace(/"/g, '""')}"`,
+            `"${s.grade.replace(/"/g, '""')}"`,
+            s.presentDays,
+            s.excusedAbsentDays,
+            s.unexcusedAbsentDays,
+            `"${rate}%"`,
+            s.achievements.length
+        ].join(",");
+    });
+
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `تقرير_الحضور_والانتظام_${getTodayDateISO()}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
+function exportBackupJSON(): void {
+    if (!isAdminAuthenticated) return;
+    const backupData = {
+        version: "1.0",
+        exportedAt: new Date().toISOString(),
+        students: students
+    };
+
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `نسخة_احتياطية_الهوية_المدرسية_${getTodayDateISO()}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
+function triggerBackupRestore(): void {
+    if (!isAdminAuthenticated) return;
+    const fileInput = document.getElementById("restore-backup-input") as HTMLInputElement;
+    if (fileInput) {
+        fileInput.value = "";
+        fileInput.click();
+    }
+}
+
+function importBackupJSON(event: Event): void {
+    if (!isAdminAuthenticated) return;
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const parsed = JSON.parse(String(e.target?.result || ""));
+            const restoredList = Array.isArray(parsed) ? parsed : parsed.students;
+
+            if (!Array.isArray(restoredList)) {
+                alert("❌ ملف النسخة الاحتياطية غير صالح!");
+                return;
+            }
+
+            if (!confirm(`سيتم استبدال البيانات الحالية بـ (${restoredList.length}) طالب من النسخة الاحتياطية. هل تريد المتابعة؟`)) {
+                return;
+            }
+
+            students = restoredList.map((s: any) => ({
+                id: String(s.id || "").toUpperCase(),
+                name: String(s.name || ""),
+                grade: String(s.grade || ""),
+                presentDays: Number(s.presentDays) || 0,
+                excusedAbsentDays: Number(s.excusedAbsentDays) || 0,
+                unexcusedAbsentDays: Number(s.unexcusedAbsentDays) || 0,
+                lastAttendedDate: String(s.lastAttendedDate || ""),
+                attendanceLogs: Array.isArray(s.attendanceLogs) ? s.attendanceLogs : [],
+                achievements: Array.isArray(s.achievements) ? s.achievements : []
+            }));
+
+            saveStudents();
+            renderStudentIdCards();
+            alert("✅ تمت استعادة النسخة الاحتياطية بنجاح!");
+        } catch {
+            alert("❌ حدث خطأ أثناء قراءة ملف النسخة الاحتياطية.");
+        }
+    };
+    reader.readAsText(file);
+}
+
 function clearAllStudents(): void {
     if (!isAdminAuthenticated) return;
-    if (confirm("هل أنت متأكد من مسح جميع الطلاب المسجلين؟")) {
+    if (confirm("⚠️ تأكيد المسح الشامل:\nهل أنت متأكد من مسح جميع الطلاب المسجلين وبياناتهم نهائياً؟")) {
         localStorage.removeItem(STORAGE_KEY);
         students = [];
         saveStudents();
@@ -390,14 +528,17 @@ function renderAdminTable(): void {
                 </div>
             </td>
             <td>
-                <button type="button" class="btn primary" style="padding: 0.35rem 0.75rem; font-size:0.85rem;" 
-                onclick="viewStudentFromAdmin('${s.id}')">عرض الملف والإنجازات</button>
+                <div style="display:flex; gap:0.4rem; align-items:center;">
+                    <button type="button" class="btn primary" style="padding: 0.35rem 0.7rem; font-size:0.85rem;" 
+                    onclick="viewStudentFromAdmin('${s.id}')">الملف</button>
+                    <button type="button" class="btn danger-outline" style="padding: 0.35rem 0.7rem; font-size:0.85rem;" 
+                    onclick="deleteStudent('${s.id}')">🗑️ حذف</button>
+                </div>
             </td>
         </tr>
     `).join("");
 }
 
-// رسم بطاقة هوية مدرسية واحدة بباركود ثابت (بدون إنجازات)
 function appendSingleIdCard(student: Student): void {
     const grid = document.getElementById("student-id-cards-grid");
     if (!grid) return;
@@ -478,7 +619,6 @@ function updateDayBanner(): void {
         : `اليوم: <strong>${dayName}</strong> — ✅ يوم دراسي فعلي (ماسح الحضور نشط)`;
 }
 
-// تشغيل كاميرا الماسح المخصصة لتسجيل الحضور فقط
 function startCameraScanner(): void {
     if (isCameraRunning) return;
     const btn = document.getElementById("start-camera-btn") as HTMLButtonElement;
@@ -532,6 +672,11 @@ window.addEventListener("DOMContentLoaded", () => {
 (window as any).addNewStudent = addNewStudent;
 (window as any).addAchievement = addAchievement;
 (window as any).adjustAttendanceMetric = adjustAttendanceMetric;
+(window as any).deleteStudent = deleteStudent;
+(window as any).exportToExcelCSV = exportToExcelCSV;
+(window as any).exportBackupJSON = exportBackupJSON;
+(window as any).triggerBackupRestore = triggerBackupRestore;
+(window as any).importBackupJSON = importBackupJSON;
 (window as any).clearAllStudents = clearAllStudents;
 (window as any).viewStudentFromAdmin = viewStudentFromAdmin;
 (window as any).startCameraScanner = startCameraScanner;
