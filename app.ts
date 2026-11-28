@@ -1,6 +1,12 @@
 interface Achievement {
     title: string;
-    date: string;
+    dateHijri: string;
+}
+
+interface StudentMessage {
+    sender: string;
+    text: string;
+    dateHijri: string;
 }
 
 interface Student {
@@ -15,6 +21,7 @@ interface Student {
     lastAttendedDate?: string;
     attendanceLogs: string[];
     achievements: Achievement[];
+    messages: StudentMessage[];
 }
 
 interface StudentRequest {
@@ -23,32 +30,53 @@ interface StudentRequest {
     studentName: string;
     type: "ACHIEVEMENT" | "EXCUSE";
     title: string;
-    date: string;
-    submittedAt: string;
+    dateHijri: string;
+    fileName: string;
+    fileData: string;
 }
+
+type SupervisorRole = "منشئ النظام" | "مدير المدرسة" | "وكيل المدرسة" | "أستاذ الغياب" | "مشرف النشاط" | "مرشد المدرسة";
 
 interface SupervisorAccount {
     name: string;
     password: string;
+    role: SupervisorRole;
     isFounder: boolean;
+}
+
+interface VisitorLog {
+    name: string;
+    role: string;
+    dateHijri: string;
+}
+
+interface FeaturedAchievement {
+    id: string;
+    studentName: string;
+    description: string;
+    dateHijri: string;
 }
 
 declare var QRious: any;
 declare var JsBarcode: any;
 declare var Html5Qrcode: any;
 
-const STUDENTS_KEY = "athar_students_v3";
-const REQUESTS_KEY = "athar_requests_v3";
-const SUPERVISORS_KEY = "athar_supervisors_v3";
+const STORAGE_KEYS = {
+    STUDENTS: "ATHAR_PERMANENT_STUDENTS",
+    REQUESTS: "ATHAR_PERMANENT_REQUESTS",
+    SUPERVISORS: "ATHAR_PERMANENT_SUPERVISORS",
+    VISITORS: "ATHAR_PERMANENT_VISITORS",
+    FEATURED: "ATHAR_PERMANENT_FEATURED",
+    VISITOR_CONFIG: "ATHAR_PERMANENT_VISITOR_CONFIG"
+};
+
 const MIN_ALLOWED_DATE = "2025-01-01";
 
-// المؤسسون الأساسيون (حسابات محمية لا يمكن لأحدهما إزالة الآخر)
 const FOUNDER_ACCOUNTS: SupervisorAccount[] = [
-    { name: "فايز الحربي", password: "2443422", isFounder: true },
-    { name: "علي المتحمي", password: "2443422", isFounder: true }
+    { name: "فايز الحربي", password: "2443422", role: "منشئ النظام", isFounder: true },
+    { name: "علي المتحمي", password: "2443422", role: "منشئ النظام", isFounder: true }
 ];
 
-// الإجازات المطولة والرسمية المدمجة في النظام تلقائياً (دون عرض قوائمها)
 const INTERNAL_HOLIDAY_RANGES: Array<{ start: string; end: string }> = [
     { start: "2026-12-13", end: "2026-12-13" },
     { start: "2027-01-01", end: "2027-01-09" },
@@ -60,48 +88,123 @@ const INTERNAL_HOLIDAY_RANGES: Array<{ start: string; end: string }> = [
 
 const DEFAULT_AVATAR = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23e2e8f0'/><circle cx='50' cy='38' r='18' fill='%2364748b'/><path d='M20 88 C20 65, 80 65, 80 88' fill='%2364748b'/></svg>";
 
-let students: Student[] = loadJson<Student[]>(STUDENTS_KEY, []);
-let studentRequests: StudentRequest[] = loadJson<StudentRequest[]>(REQUESTS_KEY, []);
-let supervisors: SupervisorAccount[] = loadSupervisors();
+function syncToIndexedDB(key: string, value: any): void {
+    try {
+        const req = indexedDB.open("AtharPermanentDB", 1);
+        req.onupgradeneeded = () => {
+            const db = req.result;
+            if (!db.objectStoreNames.contains("store")) db.createObjectStore("store");
+        };
+        req.onsuccess = () => {
+            const db = req.result;
+            const tx = db.transaction("store", "readwrite");
+            tx.objectStore("store").put(value, key);
+        };
+    } catch {}
+}
 
-let currentAdmin: SupervisorAccount | null = null;
-let currentViewedStudentId: string = "";
-let html5QrScanner: any = null;
-let isCameraRunning = false;
-let lastScanCode = "";
-let lastScanTime = 0;
+function restoreFromIndexedDBIfNeeded(): void {
+    try {
+        const req = indexedDB.open("AtharPermanentDB", 1);
+        req.onupgradeneeded = () => {
+            const db = req.result;
+            if (!db.objectStoreNames.contains("store")) db.createObjectStore("store");
+        };
+        req.onsuccess = () => {
+            const db = req.result;
+            const tx = db.transaction("store", "readonly");
+            const store = tx.objectStore("store");
+            const getStudents = store.get(STORAGE_KEYS.STUDENTS);
+            getStudents.onsuccess = () => {
+                if (Array.isArray(getStudents.result) && getStudents.result.length > 0 && students.length === 0) {
+                    students = getStudents.result;
+                    localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(students));
+                    renderAdminTable();
+                    populateStudentSelect();
+                    renderStudentIdCards();
+                }
+            };
+        };
+    } catch {}
+}
 
 function loadJson<T>(key: string, fallback: T): T {
     try {
         const raw = localStorage.getItem(key);
         if (raw) return JSON.parse(raw);
-    } catch (e) {
-        console.error(e);
-    }
+    } catch {}
     return fallback;
 }
 
+function saveData<T>(key: string, data: T): void {
+    localStorage.setItem(key, JSON.stringify(data));
+    syncToIndexedDB(key, data);
+}
+
+let students: Student[] = loadJson<Student[]>(STORAGE_KEYS.STUDENTS, []);
+let studentRequests: StudentRequest[] = loadJson<StudentRequest[]>(STORAGE_KEYS.REQUESTS, []);
+let visitorLogs: VisitorLog[] = loadJson<VisitorLog[]>(STORAGE_KEYS.VISITORS, []);
+let featuredAchievements: FeaturedAchievement[] = loadJson<FeaturedAchievement[]>(STORAGE_KEYS.FEATURED, []);
+let visitorConfig = loadJson<{ showHonorBoard: boolean }>(STORAGE_KEYS.VISITOR_CONFIG, { showHonorBoard: true });
+let supervisors: SupervisorAccount[] = loadSupervisors();
+
+let currentAdmin: SupervisorAccount | null = null;
+let currentViewedStudentId: string = "";
+let pendingMetricAction: { studentId: string; field: "presentDays" | "excusedAbsentDays" | "unexcusedAbsentDays"; change: number } | null = null;
+let html5QrScanner: any = null;
+let isCameraRunning = false;
+let lastScanCode = "";
+let lastScanTime = 0;
+
 function loadSupervisors(): SupervisorAccount[] {
-    const saved = loadJson<SupervisorAccount[]>(SUPERVISORS_KEY, []);
+    const saved = loadJson<SupervisorAccount[]>(STORAGE_KEYS.SUPERVISORS, []);
     const nonFounders = saved.filter(s => !s.isFounder && !FOUNDER_ACCOUNTS.some(f => f.name === s.name));
     return [...FOUNDER_ACCOUNTS, ...nonFounders];
 }
 
 function saveSupervisors(): void {
     const nonFounders = supervisors.filter(s => !s.isFounder);
-    localStorage.setItem(SUPERVISORS_KEY, JSON.stringify(nonFounders));
+    saveData(STORAGE_KEYS.SUPERVISORS, nonFounders);
     renderSupervisorsTable();
 }
 
 function saveStudents(): void {
-    localStorage.setItem(STUDENTS_KEY, JSON.stringify(students));
+    saveData(STORAGE_KEYS.STUDENTS, students);
     renderAdminTable();
+    renderAdminAchievementsTable();
     populateStudentSelect();
 }
 
 function saveRequests(): void {
-    localStorage.setItem(REQUESTS_KEY, JSON.stringify(studentRequests));
+    saveData(STORAGE_KEYS.REQUESTS, studentRequests);
     renderAdminRequests();
+}
+
+function formatToHijri(dateInput?: string | Date): string {
+    const dateObj = dateInput
+        ? (typeof dateInput === "string" ? new Date(dateInput + "T12:00:00") : dateInput)
+        : new Date();
+
+    if (isNaN(dateObj.getTime())) return String(dateInput || "");
+
+    const parts = new Intl.DateTimeFormat("en-u-ca-islamic-umalqura", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric"
+    }).formatToParts(dateObj);
+
+    const day = parts.find(p => p.type === "day")?.value || "01";
+    const month = parts.find(p => p.type === "month")?.value || "01";
+    const year = parts.find(p => p.type === "year")?.value || "1448";
+
+    return `\u202A${day}/${month}/${year} هـ\u202C`;
+}
+
+function getHijriNowWithTime(): string {
+    const now = new Date();
+    const dayName = now.toLocaleDateString("ar-SA", { weekday: "long" });
+    const time = now.toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" });
+    return `${dayName} ${formatToHijri(now)} — الساعة ${time}`;
 }
 
 function getTodayDateISO(): string {
@@ -114,7 +217,7 @@ function getTodayDateISO(): string {
 
 function configureDateConstraints(): void {
     const today = getTodayDateISO();
-    ["ach-date", "req-ach-date", "req-excuse-date"].forEach(id => {
+    ["ach-date", "req-ach-date", "req-excuse-date", "metric-date-picker"].forEach(id => {
         const el = document.getElementById(id) as HTMLInputElement;
         if (el) {
             el.min = MIN_ALLOWED_DATE;
@@ -131,7 +234,6 @@ function isValidHistoricalDate(dateStr: string): boolean {
 function checkNonSchoolDay(): boolean {
     const dayOfWeek = new Date().getDay();
     if (dayOfWeek === 5 || dayOfWeek === 6) return true;
-
     const todayISO = getTodayDateISO();
     return INTERNAL_HOLIDAY_RANGES.some(r => todayISO >= r.start && todayISO <= r.end);
 }
@@ -167,9 +269,7 @@ function renderLinearBarcode(svgElementId: string, studentId: string): void {
                 fontSize: 13,
                 margin: 4
             });
-        } catch (e) {
-            console.error(e);
-        }
+        } catch {}
     }
 }
 
@@ -193,7 +293,7 @@ function showPage(pageId: string): void {
 
     const backBtn = document.getElementById("header-back-btn");
     if (backBtn) {
-        backBtn.style.display = pageId === "portal-landing-page" ? "none" : "inline-flex";
+        backBtn.style.display = (pageId === "portal-landing-page" || pageId === "admin-dashboard-page") ? "none" : "inline-flex";
     }
 }
 
@@ -202,14 +302,239 @@ function goToPortalHome(): void {
     showPage("portal-landing-page");
 }
 
+function openVisitorPortal(): void {
+    showPage("visitor-page");
+    document.getElementById("visitor-gate-box")?.classList.remove("hidden");
+    document.getElementById("visitor-content-area")?.classList.add("hidden");
+}
+
+function enterVisitorArea(event: Event): void {
+    event.preventDefault();
+    const role = (document.getElementById("visitor-role-select") as HTMLSelectElement).value;
+    const name = (document.getElementById("visitor-name-input") as HTMLInputElement).value.trim();
+
+    const newLog: VisitorLog = {
+        name,
+        role,
+        dateHijri: getHijriNowWithTime()
+    };
+    visitorLogs.unshift(newLog);
+    saveData(STORAGE_KEYS.VISITORS, visitorLogs);
+
+    document.getElementById("visitor-gate-box")?.classList.add("hidden");
+    document.getElementById("visitor-content-area")?.classList.remove("hidden");
+    document.getElementById("visitor-welcome-title")!.innerText = `أهلاً بك ${role}: ${name}`;
+    document.getElementById("visitor-hijri-today")!.innerText = `التاريخ الهجري: ${formatToHijri()}`;
+
+    renderVisitorContent();
+}
+
+function exitVisitorArea(): void {
+    (document.getElementById("visitor-name-input") as HTMLInputElement).value = "";
+    goToPortalHome();
+}
+
+function renderVisitorContent(): void {
+    const honorSection = document.getElementById("visitor-honor-section");
+    if (honorSection) {
+        if (visitorConfig.showHonorBoard) {
+            honorSection.classList.remove("hidden");
+            const sorted = [...students].sort((a, b) => b.presentDays - a.presentDays);
+            const medals = ["المركز الأول", "المركز الثاني", "المركز الثالث"];
+
+            document.getElementById("visitor-podium")!.innerHTML = sorted.slice(0, 3).map((s, idx) => `
+                <div class="podium-card">
+                    <div class="podium-rank">${medals[idx]}</div>
+                    <h4>${s.name}</h4>
+                    <p class="muted-text" style="margin-bottom:0.4rem;">${s.grade} — فصل ${s.classroom}</p>
+                    <strong style="color:var(--teal);">${s.presentDays} يوم حضور</strong>
+                </div>
+            `).join("");
+
+            document.getElementById("visitor-honor-tbody")!.innerHTML = sorted.map((s, idx) => {
+                const total = s.presentDays + s.excusedAbsentDays + s.unexcusedAbsentDays;
+                const rate = total > 0 ? Math.round((s.presentDays / total) * 100) : 100;
+                return `
+                    <tr>
+                        <td><strong>#${idx + 1}</strong></td>
+                        <td><strong>${s.name}</strong></td>
+                        <td>${s.grade} — فصل ${s.classroom}</td>
+                        <td><strong style="color:var(--teal);">${s.presentDays}</strong></td>
+                        <td><strong>${rate}%</strong></td>
+                    </tr>
+                `;
+            }).join("");
+        } else {
+            honorSection.classList.add("hidden");
+        }
+    }
+
+    const featuredContainer = document.getElementById("visitor-featured-list")!;
+    featuredContainer.innerHTML = featuredAchievements.length
+        ? featuredAchievements.map(f => `
+            <div class="request-item-card">
+                <h4 style="color:var(--navy-dark);">${f.studentName}</h4>
+                <p style="margin:0.4rem 0;">${f.description}</p>
+                <span style="font-size:0.85rem; color:var(--text-muted);">التاريخ: ${f.dateHijri}</span>
+            </div>
+        `).join("")
+        : `<p class="muted-text">لا توجد إنجازات منشورة حالياً.</p>`;
+}
+
 function openStudentPortal(): void {
     showPage("student-page");
     configureDateConstraints();
+
+    if (currentViewedStudentId) {
+        const student = students.find(s => s.id === currentViewedStudentId);
+        if (student) {
+            document.getElementById("student-search-box")?.classList.add("hidden");
+            renderStudentCard(student);
+            return;
+        }
+    }
+    document.getElementById("student-search-box")?.classList.remove("hidden");
+    document.getElementById("student-profile-view")?.classList.add("hidden");
 }
 
-function openLeaderboardPage(): void {
-    showPage("leaderboard-page");
-    renderLeaderboard();
+function handleStudentSearch(): void {
+    const input = document.getElementById("student-search-input") as HTMLInputElement;
+    const targetId = extractStudentId(input.value);
+    const student = students.find(s => s.id === targetId);
+
+    if (!student) {
+        alert("الرقم المدرسي غير مسجل في منصة أثر!");
+        return;
+    }
+
+    document.getElementById("student-search-box")?.classList.add("hidden");
+    input.value = "";
+    renderStudentCard(student);
+}
+
+function logoutStudent(): void {
+    currentViewedStudentId = "";
+    document.getElementById("student-profile-view")?.classList.add("hidden");
+    document.getElementById("student-search-box")?.classList.remove("hidden");
+    goToPortalHome();
+}
+
+function renderStudentCard(student: Student): void {
+    currentViewedStudentId = student.id;
+    const profileView = document.getElementById("student-profile-view")!;
+    profileView.classList.remove("hidden");
+    configureDateConstraints();
+
+    document.getElementById("student-welcome-header")!.innerText = `مرحباً، ${student.name}`;
+    document.getElementById("student-hijri-date-header")!.innerText = `التاريخ الهجري اليوم: ${formatToHijri()}`;
+
+    document.getElementById("p-name")!.innerText = student.name;
+    document.getElementById("p-grade-class")!.innerText = `${student.grade} — فصل ${student.classroom || "1"}`;
+    document.getElementById("p-id")!.innerText = student.id;
+    document.getElementById("p-present")!.innerText = student.presentDays.toString();
+    document.getElementById("p-excused")!.innerText = student.excusedAbsentDays.toString();
+    document.getElementById("p-unexcused")!.innerText = student.unexcusedAbsentDays.toString();
+
+    const avatarImg = document.getElementById("p-avatar") as HTMLImageElement;
+    if (avatarImg) avatarImg.src = student.photo || DEFAULT_AVATAR;
+
+    const totalDays = student.presentDays + student.excusedAbsentDays + student.unexcusedAbsentDays;
+    const rate = totalDays > 0 ? Math.round((student.presentDays / totalDays) * 100) : 100;
+    document.getElementById("p-rate")!.innerText = `${rate}%`;
+
+    const qrImg = document.getElementById("p-qrcode-img") as HTMLImageElement;
+    if (qrImg) qrImg.src = generateSharpQrDataUrl(student.id, 220);
+    renderLinearBarcode("p-barcode-svg", student.id);
+
+    const msgs = student.messages || [];
+    document.getElementById("p-messages-list")!.innerHTML = msgs.length
+        ? msgs.map(m => `<li><strong>من (${m.sender}):</strong> ${m.text} <span style="color:#64748b; font-size:0.85rem;">(${m.dateHijri})</span></li>`).join("")
+        : "<li>لا توجد رسائل أو ردود حالياً.</li>";
+
+    document.getElementById("p-achievements-list")!.innerHTML = student.achievements.length
+        ? student.achievements.map(a => `<li><strong>${a.title}</strong> <span style="color:#64748b; font-size:0.85rem;">(التاريخ: ${a.dateHijri})</span></li>`).join("")
+        : "<li>لا توجد إنجازات معتمدة حتى الآن.</li>";
+
+    document.getElementById("p-logs-list")!.innerHTML = student.attendanceLogs.length
+        ? student.attendanceLogs.slice(0, 20).map(log => `<li>${log}</li>`).join("")
+        : "<li>لا يوجد سجل حضور أو غياب مسجل بعد.</li>";
+}
+
+function printStudentSingleCard(): void {
+    document.body.classList.add("printing-single-card");
+    window.print();
+    setTimeout(() => document.body.classList.remove("printing-single-card"), 500);
+}
+
+function handleStudentPhotoUpload(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file || !currentViewedStudentId) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement("canvas");
+            canvas.width = 180;
+            canvas.height = 180;
+            const ctx = canvas.getContext("2d");
+            if (ctx) {
+                ctx.drawImage(img, 0, 0, 180, 180);
+                const compressed = canvas.toDataURL("image/jpeg", 0.78);
+                const student = students.find(s => s.id === currentViewedStudentId);
+                if (student) {
+                    student.photo = compressed;
+                    saveStudents();
+                    renderStudentCard(student);
+                    alert("تم تحديث صورتك الشخصية بنجاح!");
+                }
+            }
+        };
+        img.src = String(e.target?.result || "");
+    };
+    reader.readAsDataURL(file);
+}
+
+function submitStudentRequest(event: Event, type: "ACHIEVEMENT" | "EXCUSE"): void {
+    event.preventDefault();
+    const student = students.find(s => s.id === currentViewedStudentId);
+    if (!student) return;
+
+    const titleEl = document.getElementById(type === "ACHIEVEMENT" ? "req-ach-title" : "req-excuse-reason") as HTMLInputElement;
+    const dateEl = document.getElementById(type === "ACHIEVEMENT" ? "req-ach-date" : "req-excuse-date") as HTMLInputElement;
+    const fileEl = document.getElementById(type === "ACHIEVEMENT" ? "req-ach-file" : "req-excuse-file") as HTMLInputElement;
+
+    if (!isValidHistoricalDate(dateEl.value)) {
+        alert(`التاريخ غير صحيح! يجب أن يكون بين ${MIN_ALLOWED_DATE} وتاريخ اليوم.`);
+        return;
+    }
+
+    const file = fileEl.files?.[0];
+    if (!file) {
+        alert("إرفاق الملف ضروري لإرسال الطلب!");
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const req: StudentRequest = {
+            id: "REQ-" + Date.now(),
+            studentId: student.id,
+            studentName: student.name,
+            type,
+            title: titleEl.value.trim(),
+            dateHijri: formatToHijri(dateEl.value),
+            fileName: file.name,
+            fileData: String(e.target?.result || "")
+        };
+
+        studentRequests.unshift(req);
+        saveRequests();
+        (event.target as HTMLFormElement).reset();
+        alert("تم إرسال الطلب مع الملف المرفق إلى المشرف بنجاح!");
+    };
+    reader.readAsDataURL(file);
 }
 
 function openAdminPortal(): void {
@@ -244,209 +569,49 @@ function setupAdminDashboard(): void {
     if (!currentAdmin) return;
     configureDateConstraints();
 
-    const badge = document.getElementById("active-admin-badge");
-    if (badge) {
-        badge.innerText = `${currentAdmin.name} ${currentAdmin.isFounder ? "(مؤسس النظام)" : "(مشرف)"}`;
-    }
+    document.getElementById("active-admin-title")!.innerText = `${currentAdmin.name} — ${currentAdmin.role}`;
 
-    const foundersSection = document.getElementById("founders-supervisors-section");
-    if (foundersSection) {
-        if (currentAdmin.isFounder) {
-            foundersSection.classList.remove("hidden");
-            renderSupervisorsTable();
-        } else {
-            foundersSection.classList.add("hidden");
-        }
-    }
+    const role = currentAdmin.role;
+    const isCreator = currentAdmin.isFounder || role === "منشئ النظام";
+    const isPrincipal = role === "مدير المدرسة";
+    const canManageAttendance = isCreator || isPrincipal || role === "وكيل المدرسة" || role === "أستاذ الغياب";
+    const canManageAchievements = isCreator || isPrincipal || role === "مشرف النشاط" || role === "مرشد المدرسة";
+    const canManageSupervisors = isCreator || isPrincipal;
+
+    toggleSection("sec-attendance-scanner", canManageAttendance);
+    toggleSection("sec-send-student-notice", canManageAttendance);
+    toggleSection("sec-students-table", canManageAttendance);
+
+    toggleSection("sec-add-achievement", canManageAchievements);
+    toggleSection("sec-achievements-management", canManageAchievements);
+
+    toggleSection("id-cards-section", isCreator);
+    toggleSection("founders-supervisors-section", canManageSupervisors);
+
+    const honorCheck = document.getElementById("toggle-visitor-honor") as HTMLInputElement;
+    if (honorCheck) honorCheck.checked = visitorConfig.showHonorBoard;
 
     renderAdminTable();
+    renderAdminAchievementsTable();
     populateStudentSelect();
-    renderStudentIdCards();
+    if (isCreator) renderStudentIdCards();
+    if (canManageSupervisors) renderSupervisorsTable();
     renderAdminRequests();
+    renderAdminVisitorControls();
     updateDayBanner();
+}
 
-    const laserInput = document.getElementById("manual-id-input") as HTMLInputElement;
-    if (laserInput) setTimeout(() => laserInput.focus(), 100);
+function toggleSection(id: string, show: boolean): void {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (show) el.classList.remove("hidden");
+    else el.classList.add("hidden");
 }
 
 function logoutAdmin(): void {
     currentAdmin = null;
     stopCameraScanner();
     goToPortalHome();
-}
-
-function renderLeaderboard(): void {
-    const gradeFilter = (document.getElementById("lb-grade-filter") as HTMLSelectElement)?.value || "ALL";
-    const classFilter = (document.getElementById("lb-class-filter") as HTMLSelectElement)?.value || "ALL";
-
-    const filtered = students
-        .filter(s => (gradeFilter === "ALL" || s.grade === gradeFilter) && (classFilter === "ALL" || (s.classroom || "1") === classFilter))
-        .sort((a, b) => {
-            if (b.presentDays !== a.presentDays) return b.presentDays - a.presentDays;
-            const totalA = a.presentDays + a.excusedAbsentDays + a.unexcusedAbsentDays;
-            const totalB = b.presentDays + b.excusedAbsentDays + b.unexcusedAbsentDays;
-            const rateA = totalA > 0 ? a.presentDays / totalA : 1;
-            const rateB = totalB > 0 ? b.presentDays / totalB : 1;
-            if (rateB !== rateA) return rateB - rateA;
-            return b.achievements.length - a.achievements.length;
-        });
-
-    const podium = document.getElementById("leaderboard-podium")!;
-    const tbody = document.getElementById("leaderboard-tbody")!;
-
-    if (filtered.length === 0) {
-        podium.innerHTML = "";
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:#64748b; padding:1.5rem;">لا يوجد طلاب مطابقون للتصفية الحالية.</td></tr>`;
-        return;
-    }
-
-    const medals = ["🥇 المركز الأول", "🥈 المركز الثاني", "🥉 المركز الثالث"];
-    podium.innerHTML = filtered.slice(0, 3).map((s, idx) => `
-        <div class="podium-card">
-            <div class="podium-rank">${medals[idx]}</div>
-            <h4>${s.name}</h4>
-            <p class="muted-text" style="margin-bottom:0.4rem;">${s.grade} — فصل ${s.classroom || "1"}</p>
-            <strong style="color:var(--teal); font-size:1.1rem;">${s.presentDays} يوم حضور</strong>
-        </div>
-    `).join("");
-
-    tbody.innerHTML = filtered.map((s, idx) => {
-        const total = s.presentDays + s.excusedAbsentDays + s.unexcusedAbsentDays;
-        const rate = total > 0 ? Math.round((s.presentDays / total) * 100) : 100;
-        const absentTotal = s.excusedAbsentDays + s.unexcusedAbsentDays;
-        return `
-            <tr>
-                <td><strong>#${idx + 1}</strong></td>
-                <td><strong>${s.name}</strong></td>
-                <td>${s.grade} — فصل ${s.classroom || "1"}</td>
-                <td><strong style="color:var(--teal);">${s.presentDays}</strong></td>
-                <td>${absentTotal}</td>
-                <td><strong>${rate}%</strong></td>
-                <td>🏆 ${s.achievements.length}</td>
-            </tr>
-        `;
-    }).join("");
-}
-
-function renderStudentCard(student: Student): void {
-    currentViewedStudentId = student.id;
-    const profileView = document.getElementById("student-profile-view")!;
-    profileView.classList.remove("hidden");
-    configureDateConstraints();
-
-    document.getElementById("p-name")!.innerText = student.name;
-    document.getElementById("p-grade-class")!.innerText = `${student.grade} — فصل ${student.classroom || "1"}`;
-    document.getElementById("p-id")!.innerText = student.id;
-    document.getElementById("p-present")!.innerText = student.presentDays.toString();
-    document.getElementById("p-excused")!.innerText = student.excusedAbsentDays.toString();
-    document.getElementById("p-unexcused")!.innerText = student.unexcusedAbsentDays.toString();
-
-    const avatarImg = document.getElementById("p-avatar") as HTMLImageElement;
-    if (avatarImg) avatarImg.src = student.photo || DEFAULT_AVATAR;
-
-    const totalDays = student.presentDays + student.excusedAbsentDays + student.unexcusedAbsentDays;
-    const rate = totalDays > 0 ? Math.round((student.presentDays / totalDays) * 100) : 100;
-    document.getElementById("p-rate")!.innerText = `${rate}%`;
-
-    const qrImg = document.getElementById("p-qrcode-img") as HTMLImageElement;
-    if (qrImg) qrImg.src = generateSharpQrDataUrl(student.id, 220);
-    renderLinearBarcode("p-barcode-svg", student.id);
-
-    const achList = document.getElementById("p-achievements-list")!;
-    achList.innerHTML = student.achievements.length
-        ? student.achievements.map(a => `<li>🏆 <strong>${a.title}</strong> <span style="color:#64748b; font-size:0.85rem;">(بتاريخ: ${a.date})</span></li>`).join("")
-        : "<li>لا توجد إنجازات معتمدة حتى الآن.</li>";
-
-    const logsList = document.getElementById("p-logs-list")!;
-    logsList.innerHTML = student.attendanceLogs.length
-        ? student.attendanceLogs.slice(0, 15).map(log => `<li>${log}</li>`).join("")
-        : "<li>لا يوجد سجل حضور أو غياب مسجل بعد.</li>";
-}
-
-function handleStudentSearch(): void {
-    const input = document.getElementById("student-search-input") as HTMLInputElement;
-    const targetId = extractStudentId(input.value);
-    const student = students.find(s => s.id === targetId);
-
-    if (!student) {
-        alert("الرقم المدرسي غير مسجل في منصة أثر!");
-        document.getElementById("student-profile-view")!.classList.add("hidden");
-        return;
-    }
-    renderStudentCard(student);
-}
-
-function printStudentSingleCard(): void {
-    document.body.classList.add("printing-single-card");
-    window.print();
-    setTimeout(() => document.body.classList.remove("printing-single-card"), 500);
-}
-
-function handleStudentPhotoUpload(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file || !currentViewedStudentId) return;
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => {
-            const canvas = document.createElement("canvas");
-            canvas.width = 180;
-            canvas.height = 180;
-            const ctx = canvas.getContext("2d");
-            if (ctx) {
-                ctx.drawImage(img, 0, 0, 180, 180);
-                const compressedBase64 = canvas.toDataURL("image/jpeg", 0.78);
-                const student = students.find(s => s.id === currentViewedStudentId);
-                if (student) {
-                    student.photo = compressedBase64;
-                    saveStudents();
-                    renderStudentCard(student);
-                    alert("✅ تم تحديث صورتك الشخصية في بطاقة الهوية بنجاح!");
-                }
-            }
-        };
-        img.src = String(e.target?.result || "");
-    };
-    reader.readAsDataURL(file);
-}
-
-function submitStudentRequest(event: Event, type: "ACHIEVEMENT" | "EXCUSE"): void {
-    event.preventDefault();
-    const student = students.find(s => s.id === currentViewedStudentId);
-    if (!student) return;
-
-    const titleEl = document.getElementById(type === "ACHIEVEMENT" ? "req-ach-title" : "req-excuse-reason") as HTMLInputElement;
-    const dateEl = document.getElementById(type === "ACHIEVEMENT" ? "req-ach-date" : "req-excuse-date") as HTMLInputElement;
-
-    if (!isValidHistoricalDate(dateEl.value)) {
-        alert(`⚠️ التاريخ غير صحيح! يجب أن يكون بين ${MIN_ALLOWED_DATE} وتاريخ اليوم (${getTodayDateISO()}).`);
-        return;
-    }
-
-    const req: StudentRequest = {
-        id: "REQ-" + Date.now(),
-        studentId: student.id,
-        studentName: student.name,
-        type,
-        title: titleEl.value.trim(),
-        date: dateEl.value,
-        submittedAt: getFormattedNow()
-    };
-
-    studentRequests.unshift(req);
-    saveRequests();
-    (event.target as HTMLFormElement).reset();
-    alert(type === "ACHIEVEMENT"
-        ? "✅ تم إرسال طلب توثيق الإنجاز إلى المشرف للمراجعة والاعتماد!"
-        : "✅ تم رفع عذر الغياب إلى المشرف بنجاح!");
-}
-
-function getFormattedNow(): string {
-    const now = new Date();
-    const dayName = now.toLocaleDateString("ar-SA", { weekday: "long" });
-    return `${dayName} ${getTodayDateISO()} — الساعة ${now.toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}`;
 }
 
 function playBeep(success: boolean): void {
@@ -468,7 +633,6 @@ function playBeep(success: boolean): void {
 
 function recordAttendanceByScanner(rawInput: string): void {
     if (!currentAdmin) return;
-
     const resultBox = document.getElementById("scan-result")!;
     resultBox.classList.remove("hidden", "success", "error", "warning");
 
@@ -476,7 +640,7 @@ function recordAttendanceByScanner(rawInput: string): void {
     if (checkNonSchoolDay() && !isDemoMode) {
         playBeep(false);
         resultBox.classList.add("warning");
-        resultBox.innerHTML = `⛔ اليوم إجازة — التحضير التلقائي متوقف.`;
+        resultBox.innerHTML = `اليوم إجازة — التحضير التلقائي متوقف.`;
         return;
     }
 
@@ -486,7 +650,7 @@ function recordAttendanceByScanner(rawInput: string): void {
     if (!student) {
         playBeep(false);
         resultBox.classList.add("error");
-        resultBox.innerText = `❌ هذا الباركود غير مسجل في منصة أثر: ${studentId}`;
+        resultBox.innerText = `هذا الباركود غير مسجل في منصة أثر: ${studentId}`;
         return;
     }
 
@@ -494,19 +658,19 @@ function recordAttendanceByScanner(rawInput: string): void {
     if (student.lastAttendedDate === todayISO) {
         playBeep(false);
         resultBox.classList.add("warning");
-        resultBox.innerHTML = `⚠️ الطالب <strong>${student.name}</strong> (${student.id}) مسجّل حضوره مسبقاً اليوم (${todayISO}).`;
+        resultBox.innerHTML = `الطالب <strong>${student.name}</strong> مسجّل حضوره مسبقاً اليوم (${formatToHijri()}).`;
         return;
     }
 
-    const timeString = getFormattedNow();
+    const hijriNow = getHijriNowWithTime();
     student.presentDays += 1;
     student.lastAttendedDate = todayISO;
-    student.attendanceLogs.unshift(`✅ حضور (قارئ الباركود): ${timeString}`);
+    student.attendanceLogs.unshift(`حضور (باركود): ${hijriNow}`);
     saveStudents();
     playBeep(true);
 
     resultBox.classList.add("success");
-    resultBox.innerHTML = `✅ تم تسجيل حضور الطالب: <strong>${student.name}</strong> (${student.grade} - فصل ${student.classroom})<br>التاريخ: ${timeString}`;
+    resultBox.innerHTML = `تم تسجيل حضور الطالب: <strong>${student.name}</strong><br>التاريخ: ${hijriNow}`;
 }
 
 function handleAdminScan(): void {
@@ -518,6 +682,62 @@ function handleAdminScan(): void {
     }
 }
 
+function adjustAttendanceMetric(studentId: string, field: "presentDays" | "excusedAbsentDays" | "unexcusedAbsentDays", change: number): void {
+    if (!currentAdmin) return;
+    const student = students.find(s => s.id === studentId);
+    if (!student) return;
+
+    const currentVal = student[field] || 0;
+    const nextVal = Math.max(0, currentVal + change);
+    if (nextVal === currentVal) return;
+
+    pendingMetricAction = { studentId, field, change };
+    const titleMap = {
+        presentDays: change > 0 ? "تحديد تاريخ الحضور" : "تحديد تاريخ خصم الحضور",
+        excusedAbsentDays: change > 0 ? "تحديد تاريخ الغياب بعذر" : "تحديد تاريخ تعديل الغياب بعذر",
+        unexcusedAbsentDays: change > 0 ? "تحديد تاريخ الغياب بدون عذر" : "تحديد تاريخ تعديل الغياب"
+    };
+
+    document.getElementById("date-prompt-title")!.innerText = titleMap[field];
+    const picker = document.getElementById("metric-date-picker") as HTMLInputElement;
+    picker.value = getTodayDateISO();
+    document.getElementById("date-prompt-modal")?.classList.remove("hidden");
+}
+
+function closeDatePromptModal(): void {
+    pendingMetricAction = null;
+    document.getElementById("date-prompt-modal")?.classList.add("hidden");
+}
+
+function confirmMetricDate(event: Event): void {
+    event.preventDefault();
+    if (!currentAdmin || !pendingMetricAction) return;
+
+    const dateVal = (document.getElementById("metric-date-picker") as HTMLInputElement).value;
+    if (!isValidHistoricalDate(dateVal)) {
+        alert("التاريخ غير صحيح!");
+        return;
+    }
+
+    const { studentId, field, change } = pendingMetricAction;
+    const student = students.find(s => s.id === studentId);
+    if (student) {
+        student[field] = Math.max(0, (student[field] || 0) + change);
+        const hijriDate = formatToHijri(dateVal);
+
+        if (field === "presentDays") {
+            student.attendanceLogs.unshift(`${change > 0 ? "حضور يدوي" : "خصم حضور"}: بتاريخ ${hijriDate} (${currentAdmin.name})`);
+        } else if (field === "excusedAbsentDays") {
+            student.attendanceLogs.unshift(`${change > 0 ? "غياب بعذر" : "تعديل غياب بعذر"}: بتاريخ ${hijriDate} (${currentAdmin.name})`);
+        } else {
+            student.attendanceLogs.unshift(`${change > 0 ? "غياب بدون عذر" : "تعديل غياب بدون عذر"}: بتاريخ ${hijriDate} (${currentAdmin.name})`);
+        }
+        saveStudents();
+    }
+
+    closeDatePromptModal();
+}
+
 function addNewStudent(event: Event): void {
     event.preventDefault();
     if (!currentAdmin) return;
@@ -527,10 +747,6 @@ function addNewStudent(event: Event): void {
     const grade = (document.getElementById("new-grade") as HTMLSelectElement).value;
     const classroom = (document.getElementById("new-classroom") as HTMLSelectElement).value;
 
-    if (!grade || !classroom) {
-        alert("يرجى اختيار الصف الدراسي والفصل!");
-        return;
-    }
     if (students.some(s => s.id === id)) {
         alert("الرقم المدرسي مسجل مسبقاً!");
         return;
@@ -546,14 +762,15 @@ function addNewStudent(event: Event): void {
         unexcusedAbsentDays: 0,
         lastAttendedDate: "",
         attendanceLogs: [],
-        achievements: []
+        achievements: [],
+        messages: []
     };
 
     students.push(newStudent);
     saveStudents();
-    appendSingleIdCard(newStudent);
+    if (currentAdmin.isFounder) appendSingleIdCard(newStudent);
     (event.target as HTMLFormElement).reset();
-    alert(`✅ تم تسجيل الطالب ${name} وإصدار بطاقة أثر بنجاح!`);
+    alert(`تم تسجيل الطالب ${name} بنجاح!`);
 }
 
 function addAchievement(event: Event): void {
@@ -562,66 +779,129 @@ function addAchievement(event: Event): void {
 
     const studentId = (document.getElementById("select-student") as HTMLSelectElement).value;
     const title = (document.getElementById("ach-title") as HTMLInputElement).value.trim();
-    const date = (document.getElementById("ach-date") as HTMLInputElement).value;
+    const dateVal = (document.getElementById("ach-date") as HTMLInputElement).value;
 
-    if (!studentId) {
-        alert("يرجى تسجيل طالب أولاً!");
-        return;
-    }
-    if (!isValidHistoricalDate(date)) {
-        alert(`⚠️ التاريخ غير صحيح! يجب أن يكون بين ${MIN_ALLOWED_DATE} وتاريخ اليوم (${getTodayDateISO()}).`);
+    if (!isValidHistoricalDate(dateVal)) {
+        alert("التاريخ غير صحيح!");
         return;
     }
 
     const student = students.find(s => s.id === studentId);
     if (student) {
-        student.achievements.unshift({ title, date });
+        student.achievements.unshift({ title, dateHijri: formatToHijri(dateVal) });
         saveStudents();
         (event.target as HTMLFormElement).reset();
-        alert("✅ تم توثيق الإنجاز في سجل الطالب بنجاح!");
+        alert("تم توثيق الإنجاز بالتاريخ الهجري بنجاح!");
     }
+}
+
+function deleteStudentAchievement(studentId: string, achIndex: number): void {
+    if (!currentAdmin) return;
+    const student = students.find(s => s.id === studentId);
+    if (!student) return;
+
+    if (!confirm("هل تريد حذف هذا الإنجاز من سجل الطالب؟")) return;
+    student.achievements.splice(achIndex, 1);
+    saveStudents();
+}
+
+function renderAdminAchievementsTable(): void {
+    const tbody = document.getElementById("admin-achievements-tbody");
+    if (!tbody) return;
+
+    const rows: string[] = [];
+    students.forEach(s => {
+        s.achievements.forEach((a, idx) => {
+            rows.push(`
+                <tr>
+                    <td><strong>${s.name}</strong></td>
+                    <td>${a.title}</td>
+                    <td>${a.dateHijri}</td>
+                    <td><button type="button" class="btn btn-danger-outline" onclick="deleteStudentAchievement('${s.id}', ${idx})">حذف الإنجاز</button></td>
+                </tr>
+            `);
+        });
+    });
+
+    tbody.innerHTML = rows.length
+        ? rows.join("")
+        : `<tr><td colspan="4" style="text-align:center; color:#64748b; padding:1rem;">لا توجد إنجازات مسجلة حالياً.</td></tr>`;
 }
 
 function renderAdminRequests(): void {
     const container = document.getElementById("admin-requests-list");
     const countBadge = document.getElementById("pending-requests-count");
-    if (!container) return;
+    if (!container || !currentAdmin) return;
 
-    if (countBadge) countBadge.innerText = `${studentRequests.length} طلبات`;
+    const role = currentAdmin.role;
+    const isCreatorOrPrincipal = currentAdmin.isFounder || role === "منشئ النظام" || role === "مدير المدرسة";
+    const isAttendanceRole = role === "وكيل المدرسة" || role === "أستاذ الغياب";
+    const isActivityRole = role === "مشرف النشاط" || role === "مرشد المدرسة";
 
-    if (studentRequests.length === 0) {
-        container.innerHTML = `<p class="muted-text" style="margin-bottom:0;">لا توجد طلبات معلقة من الطلاب حالياً.</p>`;
+    const visibleRequests = studentRequests.filter(r => {
+        if (isCreatorOrPrincipal) return true;
+        if (isAttendanceRole && r.type === "EXCUSE") return true;
+        if (isActivityRole && r.type === "ACHIEVEMENT") return true;
+        return false;
+    });
+
+    if (countBadge) countBadge.innerText = `${visibleRequests.length} طلبات`;
+
+    if (visibleRequests.length === 0) {
+        container.innerHTML = `<p class="muted-text" style="margin-bottom:0;">لا توجد طلبات معلقة ضمن صلاحيتك حالياً.</p>`;
         return;
     }
 
-    container.innerHTML = studentRequests.map(r => `
+    container.innerHTML = visibleRequests.map(r => `
         <div class="request-item-card">
-            <span class="gateway-badge ${r.type === 'EXCUSE' ? 'honor-b' : ''}" style="margin-bottom:0.5rem;">
-                ${r.type === "ACHIEVEMENT" ? "🏅 طلب إنجاز" : "📝 عذر غياب"}
+            <span class="gateway-badge ${r.type === 'EXCUSE' ? 'honor-b' : ''}">
+                ${r.type === "ACHIEVEMENT" ? "طلب إنجاز" : "عذر غياب"}
             </span>
             <h4 style="color:var(--navy-dark);">${r.studentName} (${r.studentId})</h4>
             <p style="font-size:0.9rem; margin:0.3rem 0;"><strong>التفاصيل:</strong> ${r.title}</p>
-            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:0.8rem;"><strong>التاريخ:</strong> ${r.date}</p>
+            <p style="font-size:0.85rem; color:var(--text-muted);"><strong>التاريخ الهجري:</strong> ${r.dateHijri}</p>
+            <p style="margin:0.5rem 0;">
+                <a href="${r.fileData}" download="${r.fileName}" target="_blank" style="color:var(--blue); font-weight:700; text-decoration:underline;">
+                    عرض / تحميل الملف المرفق (${r.fileName})
+                </a>
+            </p>
+            <input type="text" id="reply-input-${r.id}" placeholder="اكتب ردك للطالب هنا (اختياري)..." style="padding:0.5rem; font-size:0.85rem; margin-bottom:0.6rem;">
             <div style="display:flex; gap:0.5rem;">
-                <button type="button" class="btn btn-success" style="padding:0.4rem 0.8rem; font-size:0.85rem;" onclick="approveStudentRequest('${r.id}')">✅ اعتماد</button>
-                <button type="button" class="btn btn-danger-outline" style="padding:0.4rem 0.8rem; font-size:0.85rem;" onclick="rejectStudentRequest('${r.id}')">✖ رفض</button>
+                <button type="button" class="btn btn-success" style="padding:0.4rem 0.8rem; font-size:0.85rem;" onclick="processStudentRequest('${r.id}', true)">اعتماد والرد</button>
+                <button type="button" class="btn btn-danger-outline" style="padding:0.4rem 0.8rem; font-size:0.85rem;" onclick="processStudentRequest('${r.id}', false)">رفض والرد</button>
             </div>
         </div>
     `).join("");
 }
 
-function approveStudentRequest(reqId: string): void {
+function processStudentRequest(reqId: string, approved: boolean): void {
     if (!currentAdmin) return;
     const req = studentRequests.find(r => r.id === reqId);
     if (!req) return;
 
+    const replyText = (document.getElementById(`reply-input-${reqId}`) as HTMLInputElement)?.value.trim();
     const student = students.find(s => s.id === req.studentId);
+
     if (student) {
-        if (req.type === "ACHIEVEMENT") {
-            student.achievements.unshift({ title: req.title, date: req.date });
+        if (!student.messages) student.messages = [];
+        if (approved) {
+            if (req.type === "ACHIEVEMENT") {
+                student.achievements.unshift({ title: req.title, dateHijri: req.dateHijri });
+            } else {
+                student.excusedAbsentDays += 1;
+                student.attendanceLogs.unshift(`غياب بعذر معتمد (${req.title}) — بتاريخ ${req.dateHijri}`);
+            }
+            student.messages.unshift({
+                sender: `${currentAdmin.name} (${currentAdmin.role})`,
+                text: `تم اعتماد طلبك (${req.title}). ${replyText ? "الرد: " + replyText : ""}`,
+                dateHijri: formatToHijri()
+            });
         } else {
-            student.excusedAbsentDays += 1;
-            student.attendanceLogs.unshift(`🟡 غياب بعذر معتمد (${req.title}) — بتاريخ ${req.date} (اعتماد: ${currentAdmin.name})`);
+            student.messages.unshift({
+                sender: `${currentAdmin.name} (${currentAdmin.role})`,
+                text: `تم رفض طلبك (${req.title}). ${replyText ? "السبب: " + replyText : ""}`,
+                dateHijri: formatToHijri()
+            });
         }
         saveStudents();
     }
@@ -630,37 +910,76 @@ function approveStudentRequest(reqId: string): void {
     saveRequests();
 }
 
-function rejectStudentRequest(reqId: string): void {
+function sendNoticeToStudent(event: Event): void {
+    event.preventDefault();
     if (!currentAdmin) return;
-    studentRequests = studentRequests.filter(r => r.id !== reqId);
-    saveRequests();
+
+    const studentId = (document.getElementById("notice-student-select") as HTMLSelectElement).value;
+    const text = (document.getElementById("notice-text-input") as HTMLInputElement).value.trim();
+    const student = students.find(s => s.id === studentId);
+
+    if (student) {
+        if (!student.messages) student.messages = [];
+        student.messages.unshift({
+            sender: `${currentAdmin.name} (${currentAdmin.role})`,
+            text,
+            dateHijri: formatToHijri()
+        });
+        saveStudents();
+        (event.target as HTMLFormElement).reset();
+        alert(`تم إرسال الرسالة إلى ملف الطالب ${student.name} بنجاح!`);
+    }
 }
 
-function adjustAttendanceMetric(studentId: string, field: "presentDays" | "excusedAbsentDays" | "unexcusedAbsentDays", change: number): void {
+function saveVisitorSettings(): void {
+    const honorCheck = document.getElementById("toggle-visitor-honor") as HTMLInputElement;
+    visitorConfig.showHonorBoard = honorCheck ? honorCheck.checked : true;
+    saveData(STORAGE_KEYS.VISITOR_CONFIG, visitorConfig);
+}
+
+function addFeaturedVisitorItem(event: Event): void {
+    event.preventDefault();
     if (!currentAdmin) return;
-    const student = students.find(s => s.id === studentId);
-    if (!student) return;
 
-    const currentVal = student[field] || 0;
-    const nextVal = Math.max(0, currentVal + change);
-    if (nextVal === currentVal) return;
+    const studentName = (document.getElementById("featured-student-name") as HTMLInputElement).value.trim();
+    const description = (document.getElementById("featured-ach-desc") as HTMLInputElement).value.trim();
 
-    student[field] = nextVal;
-    const timeString = getFormattedNow();
+    featuredAchievements.unshift({
+        id: "FEAT-" + Date.now(),
+        studentName,
+        description,
+        dateHijri: formatToHijri()
+    });
+    saveData(STORAGE_KEYS.FEATURED, featuredAchievements);
+    renderAdminVisitorControls();
+    (event.target as HTMLFormElement).reset();
+}
 
-    if (change > 0) {
-        if (field === "presentDays") {
-            student.attendanceLogs.unshift(`✅ حضور يدوي: ${timeString} (بواسطة: ${currentAdmin.name})`);
-        } else if (field === "excusedAbsentDays") {
-            student.attendanceLogs.unshift(`🟡 غياب بعذر: ${timeString} (بواسطة: ${currentAdmin.name})`);
-        } else if (field === "unexcusedAbsentDays") {
-            student.attendanceLogs.unshift(`🔴 غياب بدون عذر: ${timeString} (بواسطة: ${currentAdmin.name})`);
-        }
-    } else if (field === "presentDays" && nextVal === 0) {
-        student.lastAttendedDate = "";
+function deleteFeaturedVisitorItem(id: string): void {
+    featuredAchievements = featuredAchievements.filter(f => f.id !== id);
+    saveData(STORAGE_KEYS.FEATURED, featuredAchievements);
+    renderAdminVisitorControls();
+}
+
+function renderAdminVisitorControls(): void {
+    const featList = document.getElementById("admin-featured-list");
+    if (featList) {
+        featList.innerHTML = featuredAchievements.length
+            ? featuredAchievements.map(f => `
+                <li style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem;">
+                    <span><strong>${f.studentName}:</strong> ${f.description}</span>
+                    <button type="button" class="btn btn-danger-outline" style="padding:0.2rem 0.6rem;" onclick="deleteFeaturedVisitorItem('${f.id}')">حذف</button>
+                </li>
+            `).join("")
+            : "<li>لا توجد إنجازات منشورة للزوار حالياً.</li>";
     }
 
-    saveStudents();
+    const visList = document.getElementById("admin-visitors-log-list");
+    if (visList) {
+        visList.innerHTML = visitorLogs.length
+            ? visitorLogs.slice(0, 20).map(v => `<li><strong>${v.name}</strong> (${v.role}) — ${v.dateHijri}</li>`).join("")
+            : "<li>لم يسجل دخول أي زائر بعد.</li>";
+    }
 }
 
 function openEditStudentModal(studentId: string): void {
@@ -700,12 +1019,12 @@ function saveEditedStudent(event: Event): void {
     student.unexcusedAbsentDays = Math.max(0, Number((document.getElementById("edit-stu-unexcused") as HTMLInputElement).value) || 0);
 
     const note = (document.getElementById("edit-stu-note") as HTMLInputElement).value.trim();
-    student.attendanceLogs.unshift(`✏️ تعديل سجل (${note || "تصحيح بيانات التحضير"}): ${getFormattedNow()} — المشرف: ${currentAdmin.name}`);
+    student.attendanceLogs.unshift(`تعديل سجل (${note || "تصحيح"}): ${getHijriNowWithTime()} — ${currentAdmin.name}`);
 
     saveStudents();
-    renderStudentIdCards();
+    if (currentAdmin.isFounder) renderStudentIdCards();
     closeEditModal();
-    alert("✅ تم حفظ التعديلات وتحديث سجل الطالب بنجاح!");
+    alert("تم حفظ التعديلات بنجاح!");
 }
 
 function deleteStudent(studentId: string): void {
@@ -713,20 +1032,20 @@ function deleteStudent(studentId: string): void {
     const student = students.find(s => s.id === studentId);
     if (!student) return;
 
-    if (!confirm(`⚠️ تأكيد الحذف:\nهل أنت متأكد من حذف الطالب "${student.name}" (${student.id}) وجميع سجلاته نهائياً؟`)) {
-        return;
-    }
-
+    if (!confirm(`تأكيد حذف الطالب "${student.name}" (${student.id}) نهائياً؟`)) return;
     students = students.filter(s => s.id !== studentId);
     saveStudents();
-    renderStudentIdCards();
+    if (currentAdmin.isFounder) renderStudentIdCards();
 }
 
 function addNewSupervisor(event: Event): void {
     event.preventDefault();
-    if (!currentAdmin || !currentAdmin.isFounder) return;
+    if (!currentAdmin) return;
+    const canManage = currentAdmin.isFounder || currentAdmin.role === "منشئ النظام" || currentAdmin.role === "مدير المدرسة";
+    if (!canManage) return;
 
     const name = (document.getElementById("sup-new-name") as HTMLInputElement).value.trim();
+    const role = (document.getElementById("sup-new-role") as HTMLSelectElement).value as SupervisorRole;
     const password = (document.getElementById("sup-new-pass") as HTMLInputElement).value.trim();
 
     if (supervisors.some(s => s.name === name)) {
@@ -734,20 +1053,19 @@ function addNewSupervisor(event: Event): void {
         return;
     }
 
-    supervisors.push({ name, password, isFounder: false });
+    supervisors.push({ name, password, role, isFounder: false });
     saveSupervisors();
     (event.target as HTMLFormElement).reset();
-    alert(`✅ تمت إضافة المشرف "${name}" بنجاح!`);
+    alert(`تمت إضافة "${name}" بصفة (${role}) بنجاح!`);
 }
 
 function removeSupervisor(supName: string): void {
-    if (!currentAdmin || !currentAdmin.isFounder) return;
-
+    if (!currentAdmin) return;
     const target = supervisors.find(s => s.name === supName);
     if (!target) return;
 
     if (target.isFounder) {
-        alert("⛔ حسابات المؤسسين (فايز الحربي وعلي المتحمي) محمية ولا يمكن إزالتها نهائياً!");
+        alert("لا يمكن إزالة منشئ النظام!");
         return;
     }
 
@@ -758,16 +1076,16 @@ function removeSupervisor(supName: string): void {
 
 function renderSupervisorsTable(): void {
     const tbody = document.getElementById("supervisors-tbody");
-    if (!tbody || !currentAdmin || !currentAdmin.isFounder) return;
+    if (!tbody || !currentAdmin) return;
 
     tbody.innerHTML = supervisors.map(s => `
         <tr>
             <td><strong>${s.name}</strong></td>
-            <td>${s.isFounder ? "👑 مؤسس النظام (صلاحية كاملة محمية)" : "🛡️ مشرف مدرسي"}</td>
+            <td>${s.role}</td>
             <td>
                 ${s.isFounder
-                    ? `<span style="color:var(--teal); font-weight:700;">🔒 محمي</span>`
-                    : `<button type="button" class="btn btn-danger-outline" onclick="removeSupervisor('${s.name}')">🗑️ إزالة المشرف</button>`
+                    ? `<span style="color:var(--teal); font-weight:700;">منشئ النظام</span>`
+                    : `<button type="button" class="btn btn-danger-outline" onclick="removeSupervisor('${s.name}')">إزالة</button>`
                 }
             </td>
         </tr>
@@ -775,27 +1093,12 @@ function renderSupervisorsTable(): void {
 }
 
 function exportToExcelCSV(): void {
-    if (!currentAdmin) return;
-    if (students.length === 0) {
-        alert("لا يوجد طلاب مسجلون لتصديرهم!");
-        return;
-    }
-
+    if (!currentAdmin || students.length === 0) return;
     const headers = ["رقم الطالب", "اسم الطالب", "الصف", "الفصل", "أيام الحضور", "غياب بعذر", "غياب بدون عذر", "نسبة الانتظام", "الإنجازات"];
     const rows = students.map(s => {
         const total = s.presentDays + s.excusedAbsentDays + s.unexcusedAbsentDays;
         const rate = total > 0 ? Math.round((s.presentDays / total) * 100) : 100;
-        return [
-            `"${s.id}"`,
-            `"${s.name.replace(/"/g, '""')}"`,
-            `"${s.grade}"`,
-            `"${s.classroom || "1"}"`,
-            s.presentDays,
-            s.excusedAbsentDays,
-            s.unexcusedAbsentDays,
-            `"${rate}%"`,
-            s.achievements.length
-        ].join(",");
+        return [`"${s.id}"`, `"${s.name}"`, `"${s.grade}"`, `"${s.classroom}"`, s.presentDays, s.excusedAbsentDays, s.unexcusedAbsentDays, `"${rate}%"`, s.achievements.length].join(",");
     });
 
     const csvContent = "\uFEFF" + [headers.join(","), ...rows].join("\n");
@@ -803,7 +1106,7 @@ function exportToExcelCSV(): void {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `أثر_تقرير_الانتظام_${getTodayDateISO()}.csv`;
+    link.download = `أثر_تقرير_الانتظام.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -814,16 +1117,16 @@ function exportBackupJSON(): void {
     if (!currentAdmin) return;
     const backupData = {
         platform: "أثر",
-        school: "مدرسة الموهوبين التقنية",
-        exportedAt: new Date().toISOString(),
         students,
-        supervisors: supervisors.filter(s => !s.isFounder)
+        supervisors: supervisors.filter(s => !s.isFounder),
+        featuredAchievements,
+        visitorLogs
     };
     const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `أثر_نسخة_احتياطية_${getTodayDateISO()}.json`;
+    link.download = `أثر_نسخة_احتياطية.json`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -831,13 +1134,11 @@ function exportBackupJSON(): void {
 }
 
 function triggerBackupRestore(): void {
-    if (!currentAdmin) return;
     const fileInput = document.getElementById("restore-backup-input") as HTMLInputElement;
     if (fileInput) { fileInput.value = ""; fileInput.click(); }
 }
 
 function importBackupJSON(event: Event): void {
-    if (!currentAdmin) return;
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
@@ -847,31 +1148,13 @@ function importBackupJSON(event: Event): void {
         try {
             const parsed = JSON.parse(String(e.target?.result || ""));
             const restoredList = Array.isArray(parsed) ? parsed : parsed.students;
-            if (!Array.isArray(restoredList)) {
-                alert("❌ ملف النسخة الاحتياطية غير صالح!");
-                return;
-            }
-            if (!confirm(`سيتم استبدال البيانات الحالية بـ (${restoredList.length}) طالب. هل تريد المتابعة؟`)) return;
-
-            students = restoredList.map((s: any) => ({
-                id: String(s.id || "").toUpperCase(),
-                name: String(s.name || ""),
-                grade: String(s.grade || "الأول ثانوي"),
-                classroom: String(s.classroom || "1"),
-                photo: s.photo || "",
-                presentDays: Number(s.presentDays) || 0,
-                excusedAbsentDays: Number(s.excusedAbsentDays) || 0,
-                unexcusedAbsentDays: Number(s.unexcusedAbsentDays) || 0,
-                lastAttendedDate: String(s.lastAttendedDate || ""),
-                attendanceLogs: Array.isArray(s.attendanceLogs) ? s.attendanceLogs : [],
-                achievements: Array.isArray(s.achievements) ? s.achievements : []
-            }));
-
+            if (!Array.isArray(restoredList)) return;
+            students = restoredList;
             saveStudents();
-            renderStudentIdCards();
-            alert("✅ تمت استعادة النسخة الاحتياطية بنجاح!");
+            if (currentAdmin?.isFounder) renderStudentIdCards();
+            alert("تمت استعادة النسخة الاحتياطية بنجاح!");
         } catch {
-            alert("❌ خطأ أثناء قراءة ملف النسخة الاحتياطية.");
+            alert("خطأ أثناء قراءة الملف.");
         }
     };
     reader.readAsText(file);
@@ -880,8 +1163,8 @@ function importBackupJSON(event: Event): void {
 function viewStudentFromAdmin(studentId: string): void {
     const student = students.find(s => s.id === studentId);
     if (student) {
+        currentViewedStudentId = student.id;
         openStudentPortal();
-        renderStudentCard(student);
     }
 }
 
@@ -923,8 +1206,8 @@ function renderAdminTable(): void {
             <td>
                 <div style="display:flex; gap:0.35rem; align-items:center;">
                     <button type="button" class="btn btn-primary" style="padding:0.35rem 0.65rem; font-size:0.82rem;" onclick="viewStudentFromAdmin('${s.id}')">الملف</button>
-                    <button type="button" class="btn btn-outline" style="padding:0.35rem 0.65rem; font-size:0.82rem;" onclick="openEditStudentModal('${s.id}')">✏️ تعديل</button>
-                    <button type="button" class="btn btn-danger-outline" style="padding:0.35rem 0.65rem; font-size:0.82rem;" onclick="deleteStudent('${s.id}')">🗑️ حذف</button>
+                    <button type="button" class="btn btn-outline" style="padding:0.35rem 0.65rem; font-size:0.82rem;" onclick="openEditStudentModal('${s.id}')">تعديل</button>
+                    <button type="button" class="btn btn-danger-outline" style="padding:0.35rem 0.65rem; font-size:0.82rem;" onclick="deleteStudent('${s.id}')">حذف</button>
                 </div>
             </td>
         </tr>
@@ -943,7 +1226,7 @@ function appendSingleIdCard(student: Student): void {
     const card = document.createElement("div");
     card.className = "student-id-card";
     card.innerHTML = `
-        <div class="id-card-top">✨ منصة أثر • مدرسة الموهوبين التقنية</div>
+        <div class="id-card-top">البطاقة الطلابية • مدرسة الموهوبين التقنية</div>
         <div class="id-card-body">
             <h4>${student.name}</h4>
             <p style="color:var(--text-muted); font-size:0.85rem;">${student.grade} — فصل ${student.classroom || "1"}</p>
@@ -968,13 +1251,14 @@ function renderStudentIdCards(): void {
 }
 
 function populateStudentSelect(): void {
-    const select = document.getElementById("select-student");
-    if (!select) return;
-    if (students.length === 0) {
-        select.innerHTML = `<option value="">-- سجل طالباً أولاً --</option>`;
-        return;
-    }
-    select.innerHTML = students.map(s => `<option value="${s.id}">${s.name} (${s.grade} - فصل ${s.classroom || "1"})</option>`).join("");
+    const optionsHtml = students.length
+        ? students.map(s => `<option value="${s.id}">${s.name} (${s.grade} - فصل ${s.classroom || "1"})</option>`).join("")
+        : `<option value="">-- سجل طالباً أولاً --</option>`;
+
+    ["select-student", "notice-student-select"].forEach(selId => {
+        const el = document.getElementById(selId);
+        if (el) el.innerHTML = optionsHtml;
+    });
 }
 
 function updateDayBanner(): void {
@@ -983,8 +1267,8 @@ function updateDayBanner(): void {
 
     const dayName = new Date().toLocaleDateString("ar-SA", { weekday: "long" });
     dayBanner.innerHTML = checkNonSchoolDay()
-        ? `اليوم: <strong>${dayName}</strong> (${getTodayDateISO()}) — ⛔ اليوم إجازة (التحضير متوقف تلقائياً)`
-        : `اليوم: <strong>${dayName}</strong> (${getTodayDateISO()}) — ✅ يوم دراسي فعلي (قارئ الباركود نشط)`;
+        ? `اليوم: <strong>${dayName}</strong> (${formatToHijri()}) — اليوم إجازة (التحضير متوقف تلقائياً)`
+        : `اليوم: <strong>${dayName}</strong> (${formatToHijri()}) — يوم دراسي فعلي (قارئ الباركود نشط)`;
 }
 
 function startCameraScanner(): void {
@@ -1007,13 +1291,11 @@ function startCameraScanner(): void {
             () => {}
         ).then(() => {
             isCameraRunning = true;
-            if (btn) { btn.innerText = "✅ الكاميرا تعمل"; btn.disabled = true; }
+            if (btn) { btn.innerText = "الكاميرا تعمل"; btn.disabled = true; }
         }).catch(() => {
-            alert("تعذر فتح الكاميرا. استخدم قارئ الباركود الليزري مباشرة.");
+            alert("تعذر فتح الكاميرا.");
         });
-    } catch {
-        alert("مكتبة الكاميرا غير متاحة.");
-    }
+    } catch {}
 }
 
 function stopCameraScanner(): void {
@@ -1023,7 +1305,9 @@ function stopCameraScanner(): void {
 }
 
 window.addEventListener("DOMContentLoaded", () => {
+    restoreFromIndexedDBIfNeeded();
     configureDateConstraints();
+
     const urlParams = new URLSearchParams(window.location.search);
     const scannedStudentId = urlParams.get("id");
 
@@ -1041,7 +1325,7 @@ window.addEventListener("DOMContentLoaded", () => {
         } else {
             const studentPage = document.getElementById("student-page");
             if (studentPage) {
-                studentPage.innerHTML = `<div class="panel-card"><h2>❌ سجل الطالب غير موجود</h2><p class="muted-text">الرقم المدرسي (${scannedStudentId}) غير مسجل.</p></div>`;
+                studentPage.innerHTML = `<div class="panel-card"><h2>سجل الطالب غير موجود</h2><p class="muted-text">الرقم المدرسي (${scannedStudentId}) غير مسجل.</p></div>`;
             }
         }
         return;
@@ -1053,20 +1337,28 @@ window.addEventListener("DOMContentLoaded", () => {
 (window as any).goToPortalHome = goToPortalHome;
 (window as any).openStudentPortal = openStudentPortal;
 (window as any).openAdminPortal = openAdminPortal;
-(window as any).openLeaderboardPage = openLeaderboardPage;
-(window as any).renderLeaderboard = renderLeaderboard;
+(window as any).openVisitorPortal = openVisitorPortal;
+(window as any).enterVisitorArea = enterVisitorArea;
+(window as any).exitVisitorArea = exitVisitorArea;
 (window as any).verifyAdminLogin = verifyAdminLogin;
 (window as any).logoutAdmin = logoutAdmin;
 (window as any).handleStudentSearch = handleStudentSearch;
+(window as any).logoutStudent = logoutStudent;
 (window as any).printStudentSingleCard = printStudentSingleCard;
 (window as any).handleStudentPhotoUpload = handleStudentPhotoUpload;
 (window as any).submitStudentRequest = submitStudentRequest;
 (window as any).handleAdminScan = handleAdminScan;
 (window as any).addNewStudent = addNewStudent;
 (window as any).addAchievement = addAchievement;
-(window as any).approveStudentRequest = approveStudentRequest;
-(window as any).rejectStudentRequest = rejectStudentRequest;
+(window as any).deleteStudentAchievement = deleteStudentAchievement;
+(window as any).processStudentRequest = processStudentRequest;
+(window as any).sendNoticeToStudent = sendNoticeToStudent;
+(window as any).saveVisitorSettings = saveVisitorSettings;
+(window as any).addFeaturedVisitorItem = addFeaturedVisitorItem;
+(window as any).deleteFeaturedVisitorItem = deleteFeaturedVisitorItem;
 (window as any).adjustAttendanceMetric = adjustAttendanceMetric;
+(window as any).closeDatePromptModal = closeDatePromptModal;
+(window as any).confirmMetricDate = confirmMetricDate;
 (window as any).openEditStudentModal = openEditStudentModal;
 (window as any).closeEditModal = closeEditModal;
 (window as any).saveEditedStudent = saveEditedStudent;
